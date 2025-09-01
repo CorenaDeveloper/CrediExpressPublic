@@ -287,7 +287,7 @@ function guardarCobro() {
         data: data,
         success: function (response) {
             $btnGuardar.prop('disabled', false).html('<i class="fas fa-save me-2"></i>Registrar Cobro');
-            console.log(response.data);
+
             if (response.success) {
                 const datosCobro = {
                     idCobro: response.data?.idCobro || new Date().getTime(),
@@ -702,7 +702,7 @@ function cargarMovimientosDia() {
             tabla.clear();
             let totalIngresos = 0;
             let totalEgresos = 0;
-            console.log(response);
+
             if (response.success && response.data && Array.isArray(response.data)) {
                 response.data.forEach(function (mov) {
                     const esIngreso = mov.tipo === 'INGRESO';
@@ -1395,8 +1395,7 @@ function mostrarListaPrestamosConCalendario(prestamos) {
     const contenedor = $('#listaPrestamos');
     contenedor.empty();
     $('#cantidadPrestamos').text(prestamos.length);
-    console.log("prestamos");
-    console.log(prestamos);
+
     prestamos.forEach(function (prestamo, index) {
         const estadoMora = prestamo.cuotasVencidas > 0
             ? `<span class="badge bg-danger">Mora: ${prestamo.cuotasVencidas} cuotas</span>`
@@ -1484,13 +1483,13 @@ function cargarCronogramaReal(idPrestamo) {
 function mostrarCronogramaReal(cronograma) {
     const tbody = $('#tablaCronograma');
     tbody.empty();
-    console.log('mostrarCronogramaReal cronograma');
+
     console.log(cronograma);
+
     cronograma.forEach(function (cuota) {
         let estadoBadge = '';
         let claseRow = '';
         let seleccionable = '';
-
         if (cuota.pagado) {
             estadoBadge = '<span class="badge bg-success">Pagado</span>';
             claseRow = 'table-success';

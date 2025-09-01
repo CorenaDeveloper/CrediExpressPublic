@@ -215,58 +215,6 @@ function actualizarResumenCliente(prestamos) {
     $('#historialEstado').text(estadoCredito).className = `badge ${badgeClass}`;
 }
 
-//// MOSTRAR HISTORIAL DE PRÉSTAMOS
-////function mostrarHistorialPrestamos(prestamos) {
-////    const container = $('#listaPrestamosHistorial');
-////    container.empty();
-////    if (prestamos.length === 0) {
-////        container.html(`
-////            <div class="alert alert-info text-center">
-////                <i class="fas fa-info-circle me-2"></i>
-////                Este cliente no tiene historial de préstamos previos
-////            </div>
-////        `);
-////        //$('#rowHistorialPrestamos').show();
-////        return;
-////    }
-////    prestamos.forEach(prestamo => {
-////        const estado = prestamo.detalleAprobado;
-////        const estadoClass = prestamo.estado === 'A' ? 'prestamo-activo' : '';
-////        const card = `
-////            <div class="card prestamo-card ${estadoClass} mb-2">
-////                <div class="card-body p-3">
-////                    <div class="row align-items-center">
-////                        <div class="col-md-2">
-////                            <strong class="text-primary">Préstamo #${prestamo.id}</strong>
-////                            <br><small class="text-muted">${prestamo.fecha}</small>
-////                        </div>
-////                        <div class="col-md-2">
-////                            <span class="badge ${prestamo.estado === 'A' ? 'bg-success' : 'bg-secondary'}">${estado}</span>
-////                        </div>
-////                        <div class="col-md-2">
-////                            <strong>$${prestamo.monto.toFixed(2)}</strong>
-////                            <br><small class="text-muted">Monto</small>
-////                        </div>
-////                        <div class="col-md-2">
-////                            <strong>$${prestamo.cuotas.toFixed(2)}</strong>
-////                            <br><small class="text-muted">Cuota</small>
-////                        </div>
-////                        <div class="col-md-2">
-////                            <strong>${prestamo.numCuotas}</strong>
-////                            <br><small class="text-muted">Cuotas</small>
-////                        </div>
-////                        <div class="col-md-2">
-////                            <strong>${prestamo.tasa}%</strong>
-////                            <br><small class="text-muted">Tasa</small>
-////                        </div>
-////                    </div>
-////                </div>
-////            </div>
-////        `;
-////        container.append(card);
-////    });
-////    $('#rowHistorialPrestamos').show();
-////}
 
 // VALIDAR NUEVO PRÉSTAMO
 function validarNuevoPrestamo(prestamos) {
@@ -295,43 +243,6 @@ function validarNuevoPrestamo(prestamos) {
     }
 }
 
-// 🧮 FUNCIÓN MEJORADA PARA CALCULAR CUOTA
-//function calcularCuota() {
-//    const monto = parseFloat($('#txtMonto').val()) || 0;
-//    const tasaInteres = parseFloat($('#txtPorcentaje').val()) || 0;
-//    const tasaDomicilio = parseFloat($('#txtPorcentajeDomicilio').val()) || 0;
-//    const cuotas = parseInt($('#txtCuotas').val()) || 0;
-
-//    if (monto > 0 && cuotas > 0) {
-//        const interesTotal = monto * (tasaInteres / 100);
-//        const domicilioTotal = monto * (tasaDomicilio / 100);
-//        const totalAPagar = monto + interesTotal + domicilioTotal;
-//        const cuotaFinal = totalAPagar / cuotas;
-//        const intereFinal = interesTotal / cuotas;
-//        const domicilioFinal = domicilioTotal / cuotas;
-
-//        // Actualizar campos ocultos
-//        $('#txtCuotasMonto').val(cuotaFinal.toFixed(2));
-//        $('#txtInteres').val(intereFinal.toFixed(2));
-//        $('#txtDomicilio').val(domicilioFinal.toFixed(2));
-
-//        // Actualizar calculadora visual
-//        $('#resumenMonto').text('$' + monto.toFixed(2));
-//        $('#resumenInteres').text('$' + interesTotal.toFixed(2));
-//        $('#resumenDomicilio').text('$' + domicilioTotal.toFixed(2));
-//        $('#resumenTotal').text('$' + totalAPagar.toFixed(2));
-
-//        $('#calculadoraVisual').show();
-
-//        // Validaciones de riesgo
-//        validarMontoPrestamo(monto, totalAPagar);
-
-//    } else {
-//        $('#txtCuotasMonto').val('');
-//        $('#calculadoraVisual').hide();
-//        limpiarValidaciones();
-//    }
-//}
 
 // 🧮 FUNCIÓN MEJORADA PARA CALCULAR CUOTA CON INTERÉS SIMPLE
 function calcularCuota() {
@@ -352,13 +263,31 @@ function calcularCuota() {
         switch (tipoPrestamo.toUpperCase()) {
             case 'DIARIO':
 
-                // Interes aplicado tasa diaria
-                baseInteres = (tasaInteresMensual / 100) / cuotas;
-                interesxTiempo = baseInteres * cuotas;
+                if (cuotas > 30) {
+                    // Calcular meses completos
+                    let meses = Math.ceil(cuotas / 30);
+                    // Interes aplicado tasa diaria
+                    baseInteres = (tasaInteresMensual / 100) / cuotas;
+                    interesxTiempo = baseInteres * cuotas;
 
-                // domiciclio aplicado a tasa diaria
-                baseDomicilio = (tasaDomicilio / 100) / cuotas;
-                domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
+                    interesxTiempo = interesxTiempo * meses;
+
+                    // domiciclio aplicado a tasa diaria
+                    baseDomicilio = (tasaDomicilio / 100) / cuotas;
+                    domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
+
+                    domicilioxTiempo = domicilioxTiempo * meses;
+                } else {
+
+                    // Interes aplicado tasa diaria
+                    baseInteres = (tasaInteresMensual / 100) / cuotas;
+                    interesxTiempo = baseInteres * cuotas;
+
+                    // domiciclio aplicado a tasa diaria
+                    baseDomicilio = (tasaDomicilio / 100) / cuotas;
+                    domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
+
+                }
 
                 break;
             case 'SEMANAL':
