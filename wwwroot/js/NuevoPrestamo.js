@@ -258,14 +258,13 @@ function calcularCuota() {
         let interesxTiempo = 0;
         let baseDomicilio = 0;
         let domicilioxTiempo = 0;
-
+        let factor = 0; 
     
         switch (tipoPrestamo.toUpperCase()) {
-            case 'DIARIO':
-
-                if (cuotas > 30) {
-                    // Calcular meses completos
-                    let meses = Math.ceil(cuotas / 30);
+            case 'DIARIO':             
+                //20 es un mes en dias habiles asi quye el calculo es proporcional a 30 dias
+                if (cuotas >= 20) {
+                    let meses = cuotas / 20; // calcular meses completos
                     // Interes aplicado tasa diaria
                     baseInteres = (tasaInteresMensual / 100) / cuotas;
                     interesxTiempo = baseInteres * cuotas;
@@ -277,7 +276,9 @@ function calcularCuota() {
                     domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
 
                     domicilioxTiempo = domicilioxTiempo * meses;
-                } else {
+                    factor = meses;
+                } 
+                else {
 
                     // Interes aplicado tasa diaria
                     baseInteres = (tasaInteresMensual / 100) / cuotas;
@@ -286,7 +287,7 @@ function calcularCuota() {
                     // domiciclio aplicado a tasa diaria
                     baseDomicilio = (tasaDomicilio / 100) / cuotas;
                     domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
-
+                    factor = 1;
                 }
 
                 break;
@@ -299,6 +300,7 @@ function calcularCuota() {
                 // domiciclio mensual equivalente a 4 semanas
                 baseDomicilio = (tasaDomicilio / 100) / 4;
                 domicilioxTiempo = baseDomicilio * cuotas;
+                factor = 1;
 
                 break;
             case 'QUINCENAL':
@@ -310,6 +312,7 @@ function calcularCuota() {
                 // domiciclio mensual equivalente a 2 semanas
                 baseDomicilio = (tasaDomicilio / 100) / 2;
                 domicilioxTiempo = baseDomicilio * cuotas;
+                factor = 1;
 
                 break;
             case 'MENSUAL':
@@ -322,6 +325,7 @@ function calcularCuota() {
                 // domiciclio 
                 baseDomicilio = (tasaDomicilio / 100) / 1;
                 domicilioxTiempo = baseDomicilio * cuotas;
+                factor = 1;
 
                 break;
         }
@@ -333,8 +337,9 @@ function calcularCuota() {
         const totalAPagar = monto + interesTotal + domicilioTotal;
 
         const cuotaFinal = totalAPagar / cuotas;
-
+        //txtFactor
         // Actualizar campos ocultos
+        $('#txtFactor').val(factor.toFixed(2));
         $('#txtCuotasMonto').val(cuotaFinal.toFixed(2));
         $('#txtInteres').val(interesTotal.toFixed(2));
         $('#txtDomicilio').val(domicilioTotal.toFixed(2));

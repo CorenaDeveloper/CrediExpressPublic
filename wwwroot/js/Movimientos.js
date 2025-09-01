@@ -1,5 +1,6 @@
 ﻿let tabla;
 let cronogramaData = {};
+let datos = {};
 
 $(document).ready(function () {
     // Inicializar fecha actual
@@ -57,6 +58,7 @@ $(document).ready(function () {
 
 
     function buscarSolicitud() {
+        showLoadingSpinner();
         const numeroSolicitud = $('#numeroSolicitud').val().trim();
 
         if (!numeroSolicitud) {
@@ -71,10 +73,13 @@ $(document).ready(function () {
                 if (data && data.success) {
                     mostrarDatosSolicitud(data.solicitud);
                 } else {
+                    hideLoadingSpinner();
                     mostrarError(data.message || 'Solicitud no encontrada o no está aprobada');
+
                 }
             },
             error: function () {
+                hideLoadingSpinner();
                 mostrarError('Error al buscar la solicitud');
             }
         });
@@ -91,11 +96,13 @@ $(document).ready(function () {
         $('#mensajeError').hide();
         $('#datosSolicitud').show();
         $('#btnConfirmarDesembolso').show();
+        hideLoadingSpinner();
     }
 
     function confirmarDesembolso() {
-        const numeroSolicitud = $('#numeroSolicitud').val();
-        const tipoPago = $('#observacionesDesembolso').val();
+        let numeroSolicitud = $('#numeroSolicitud').val();
+        let tipoPago = $('#observacionesDesembolso').val();
+        let fechaDesembolso = $('#fechaDesembolso').val();
 
         Swal.fire({
             title: '¿Confirmar Desembolso?',
@@ -108,12 +115,12 @@ $(document).ready(function () {
             cancelButtonText: 'Cancelar'
         }).then((result) => {
             if (result.isConfirmed) {
-                procesarDesembolso(numeroSolicitud, tipoPago);
+                procesarDesembolso(numeroSolicitud, tipoPago, fechaDesembolso);
             }
         });
     }
 
-    function procesarDesembolso(numeroSolicitud, tipoPago) {
+    function procesarDesembolso(numeroSolicitud, tipoPago, fechaDesembolso) {
         // Mostrar loading
         Swal.fire({
             title: 'Procesando...',
@@ -130,7 +137,8 @@ $(document).ready(function () {
             method: 'POST',
             data: {
                 numeroSolicitud: numeroSolicitud,
-                tipoPago: tipoPago
+                tipoPago: tipoPago,
+                fechaDesembolso: fechaDesembolso
             },
             success: function (response) {
                 if (response.success) {
@@ -416,6 +424,9 @@ function mostrarListaPrestamos(prestamos) {
     }
 
     prestamosActivos.forEach(function (prestamo, index) {
+
+        console.log(prestamo);
+
         const tieneMora = 0.00;
         const estadoMora = tieneMora ?
             `<span class="badge bg-danger">Mora: 0.00 días</span>` :
@@ -504,7 +515,7 @@ function toggleCronograma() {
         // Recargar cronograma si está oculto
         const idPrestamo = $('#prestamoSeleccionadoId').val();
         if (idPrestamo) {
-            cargarCronogramaReal(idPrestamo);
+            mostrarPagosReal(idPrestamo);
         }
     }
 }
@@ -525,49 +536,7 @@ function nuevaBusqueda() {
 }
 
 
-function ajustarCamposCobro() {
-    const concepto = $('#conceptoCobro').val();
-    // Resetear campos
-    //$('#montoCapital, #montoInteres, #montoMora').val('').prop('disabled', false);
-    // Configurar campos según el concepto
-    switch (concepto) {
-        case 'CUOTA_COMPLETA':
-            $('#montoInteres').val(cronogramaData.interes || '0.00');
-            $('#montoMora').val(cronogramaData.mora || '0.00');
-            $('#montoCapital').val(cronogramaData.capital || '0.00');
-            $('#montoDomicilio').val(cronogramaData.domicilio || '0.00');
-            $('#montoInteres, #montoMora, #montoCapital, #montoDomicilio').prop('disabled', true);
-            break;
-        case 'SOLO_CAPITAL':
-            $('#montoInteres, #montoMora, #montoDomicilio').val('0.00').prop('disabled', true);
-            $('#montoCapital').val(cronogramaData.capital || '0.00');
-            break;
-        case 'SOLO_INTERES':
-            $('#montoCapital, #montoMora').val('0.00').prop('disabled', true);
-            $('#montoInteres').val(cronogramaData.interes || '0.00');
-            $('#montoDomicilio').val(cronogramaData.domicilio || '0.00');
-            break;
-        case 'ABONO_PARCIAL':
-            // Solo capital habilitado
-            $('#montoInteres, #montoMora').val('0.00').prop('disabled', true);
-            $('#montoInteres').val(cronogramaData.interes || '0.00');
-            $('#montoDomicilio').val(cronogramaData.domicilio || '0.00');
-            $('#montoMora, #montoCapital').prop('disabled', false);
-            break;
-    }
 
-    calcularTotal();
-}
-
-function calcularTotal() {
-    const capital = parseFloat($('#montoCapital').val()) || 0;
-    const interes = parseFloat($('#montoInteres').val()) || 0;
-    const mora = parseFloat($('#montoMora').val()) || 0;
-    const domicilio = parseFloat($('#montoDomicilio').val()) || 0;
-
-    const total = capital + interes + mora + domicilio;
-    $('#montoTotal').val(total.toFixed(2));
-}
 
 // Función mejorada para buscar cliente
 function getClienteBuscar() {
@@ -603,7 +572,7 @@ function getCliente(dui){
                 return;
             }
             mostrarDatosCliente(resp);
-            buscarPrestamosConCalendario(resp.id);
+            buscarPrestamosActivos(resp.id);
         },
         error: function (xhr, status, error) {
             console.error('Error al buscar cliente:', error);
@@ -688,7 +657,7 @@ function seleccionarClienteDetalle(idCliente) {
     $('#rowSeleccionCliente').hide();
 
     mostrarDatosCliente(cliente);
-    buscarPrestamosConCalendario(cliente.id);
+    buscarPrestamosActivos(cliente.id);
 }
 
 
@@ -935,6 +904,62 @@ function generarTicketCobroPDF(datosCobro) {
                         [{ text: `$${datosCobro.montoTotal.toFixed(2)}`, fontSize: 14, bold: true, color: '#1976D2', alignment: 'center', fillColor: '#e8f5e8' }]
                     ]
                 },
+                margin: [0, 0, 0, 15]
+            },
+            {
+                text: 'DESCUENTOS APLICADOS',
+                fontSize: 9,
+                bold: true,
+                decoration: 'underline',
+                margin: [0, 10, 0, 5]
+            },
+            {
+                table: {
+                    widths: ['60%', '40%'],
+                    body: [
+                        [{ text: 'Descuento aplicado:', bold: true }, { text: '$_________', alignment: 'right' }]
+                    ]
+                },
+                layout: 'lightHorizontalLines',
+                margin: [0, 0, 0, 15]
+            },
+
+            // Monto recibido neto
+            {
+                text: 'MONTO NETO RECIBIDO',
+                fontSize: 9,
+                bold: true,
+                decoration: 'underline',
+                margin: [0, 5, 0, 5]
+            },
+            {
+                table: {
+                    widths: ['60%', '40%'],
+                    body: [
+                        [{ text: 'Total menos descuentos:', bold: true, color: '#1976D2' },
+                            { text: `$_________`, alignment: 'right', bold: true, fontSize: 10, color: '#1976D2' }]
+                    ]
+                },
+                layout: 'lightHorizontalLines',
+                margin: [0, 0, 0, 15]
+            },
+
+            // Firma de recibido
+            {
+                text: 'FIRMA DE RECIBIDO',
+                fontSize: 9,
+                bold: true,
+                margin: [0, 15, 0, 10]
+            },
+            {
+                text: '________________________________',
+                alignment: 'center',
+                margin: [0, 0, 0, 5]
+            },
+            {
+                text: 'Firma del Cliente',
+                fontSize: 8,
+                alignment: 'center',
                 margin: [0, 0, 0, 15]
             },
             {
@@ -1284,7 +1309,7 @@ function generarComprobanteCompleto(movimiento) {
                         [{ text: 'TIPO:', bold: true }, movimiento.tipo],
                         [{ text: 'CONCEPTO:', bold: true }, movimiento.concepto || ''],
                         [{ text: 'MÉTODO:', bold: true }, movimiento.tipoPago || 'EFECTIVO'],
-                        [{ text: 'USUARIO:', bold: true }, movimiento.usuario || 'Sistema']
+                        [{ text: 'GESTOR:', bold: true }, movimiento.usuario || 'Sistema']
                     ]
                 },
                 layout: 'noBorders',
@@ -1340,15 +1365,69 @@ function generarComprobanteCompleto(movimiento) {
                     table: {
                         widths: ['100%'],
                         body: [
-                            [{ text: `Préstamo #${movimiento.idPrestamo} - ${movimiento.tipoPrestamo || ''}`, fontSize: 8, alignment: 'center' }],
-                            [{ text: `Estado: ${movimiento.estadoPrestamo === 'A' ? 'Activo' : movimiento.estadoPrestamo === 'C' ? 'Cancelado' : 'Otro'}`, fontSize: 8, alignment: 'center' }]
+                            [{ text: `Préstamo #${movimiento.idPrestamo} - ${movimiento.tipoPrestamo || ''}`, fontSize: 8, alignment: 'center' }]
                         ]
                     },
                     layout: 'noBorders',
                     margin: [0, 10, 0, 15]
                 }
             ] : []),
+            {
+                text: 'DESCUENTOS APLICADOS',
+                fontSize: 9,
+                bold: true,
+                decoration: 'underline',
+                margin: [0, 10, 0, 5]
+            },
+            {
+                table: {
+                    widths: ['60%', '40%'],
+                    body: [
+                        [{ text: 'Descuento aplicado:', bold: true }, { text: '$_________', alignment: 'right' }]
+                    ]
+                },
+                layout: 'lightHorizontalLines',
+                margin: [0, 0, 0, 15]
+            },
 
+            // Monto recibido neto
+            {
+                text: 'MONTO NETO RECIBIDO',
+                fontSize: 9,
+                bold: true,
+                decoration: 'underline',
+                margin: [0, 5, 0, 5]
+            },
+            {
+                table: {
+                    widths: ['60%', '40%'],
+                    body: [
+                        [{ text: 'Total menos descuentos:', bold: true, color: '#1976D2' },
+                         { text: `$_________`, alignment: 'right', bold: true, fontSize: 10, color: '#1976D2' }]
+                    ]
+                },
+                layout: 'lightHorizontalLines',
+                margin: [0, 0, 0, 15]
+            },
+
+            // Firma de recibido
+            {
+                text: 'FIRMA DE RECIBIDO',
+                fontSize: 9,
+                bold: true,
+                margin: [0, 15, 0, 10]
+            },
+            {
+                text: '________________________________',
+                alignment: 'center',
+                margin: [0, 0, 0, 5]
+            },
+            {
+                text: 'Firma del Cliente',
+                fontSize: 8,
+                alignment: 'center',
+                margin: [0, 0, 0, 15]
+            },
             {
                 text: 'CREDI-EXPRESS DE EL SALVADOR\nComprobante oficial detallado',
                 alignment: 'center',
@@ -1364,9 +1443,9 @@ function generarComprobanteCompleto(movimiento) {
 }
 
 // NUEVA FUNCIÓN para obtener préstamos con calendario
-function buscarPrestamosConCalendario(idCliente) {
+function buscarPrestamosActivos(idCliente) {
     $.ajax({
-        url: `/Auxiliares/GetPrestamosConCalendario?idCliente=${idCliente}`,
+        url: `/Auxiliares/buscarPrestamosActivos?idCliente=${idCliente}`,
         method: 'GET',
         success: function (data) {
             if (data && data.success && Array.isArray(data.data)) {
@@ -1374,7 +1453,7 @@ function buscarPrestamosConCalendario(idCliente) {
                     mostrarError("No se encontraron préstamos activos para este cliente");
                     return;
                 }
-                mostrarListaPrestamosConCalendario(data.data);
+                mostrasListaPrestamos(data.data);
                 hideLoadingSpinner();
             } else {
                 hideLoadingSpinner();
@@ -1391,7 +1470,7 @@ function buscarPrestamosConCalendario(idCliente) {
 }
 
 // NUEVA FUNCIÓN para mostrar préstamos con información del calendario
-function mostrarListaPrestamosConCalendario(prestamos) {
+function mostrasListaPrestamos(prestamos) {
     const contenedor = $('#listaPrestamos');
     contenedor.empty();
     $('#cantidadPrestamos').text(prestamos.length);
@@ -1419,11 +1498,11 @@ function mostrarListaPrestamosConCalendario(prestamos) {
                             <strong class="text-success">$${prestamo.cuotas.toFixed(2)}</strong>
                         </div>
                         <div class="col-lg-2 col-6">
-                            <small class="text-muted">Progreso</small><br>
-                            <strong>${prestamo.cuotasPagadas}/${prestamo.numCuotas}</strong>
+                            <small class="text-muted">Abonos</small><br>
+                            <strong>${prestamo.cuotasPagadas}</strong>
                         </div>
                         <div class="col-lg-2 col-6">
-                            <small class="text-muted">Saldo Capital</small><br>
+                            <small class="text-muted">Saldo</small><br>
                             <strong class="text-warning">$${prestamo.saldoPendiente.toFixed(2)}</strong>
                         </div>
                         <div class="col-lg-2 col-6">
@@ -1454,7 +1533,7 @@ function seleccionarPrestamoConCalendario(index) {
     $('#btnGuardarCobro').show();
 
     // Cargar cronograma real
-    cargarCronogramaReal(prestamos.id);
+    mostrarPagosReal(prestamos.id);
 
     // Resaltar préstamo seleccionado
     $('.prestamo-card').removeClass('border-success bg-light');
@@ -1462,13 +1541,13 @@ function seleccionarPrestamoConCalendario(index) {
 }
 
 // NUEVA FUNCIÓN para cargar cronograma desde la base de datos
-function cargarCronogramaReal(idPrestamo) {
+function mostrarPagosReal(idPrestamo) {
     $.ajax({
         url: `/Auxiliares/GetCronogramaPagosReal?idPrestamo=${idPrestamo}`,
         method: 'GET',
         success: function (response) {
             if (response.success && response.cronograma) {
-                mostrarCronogramaReal(response.cronograma);
+                mostrarCronogramaReal(response.cronograma, idPrestamo);
             } else {
                 $('#tablaCronograma').html('<tr><td colspan="6" class="text-center text-muted">No se pudo cargar el cronograma</td></tr>');
             }
@@ -1480,35 +1559,14 @@ function cargarCronogramaReal(idPrestamo) {
 }
 
 // NUEVA FUNCIÓN para mostrar cronograma con selección de cuotas
-function mostrarCronogramaReal(cronograma) {
+function mostrarCronogramaReal(cronograma, idPrestamo) {
     const tbody = $('#tablaCronograma');
     tbody.empty();
 
     console.log(cronograma);
 
     cronograma.forEach(function (cuota) {
-        let estadoBadge = '';
         let claseRow = '';
-        let seleccionable = '';
-        if (cuota.pagado) {
-            estadoBadge = '<span class="badge bg-success">Pagado</span>';
-            claseRow = 'table-success';
-        } else if (cuota.vencido) {
-            estadoBadge = '<span class="badge bg-danger">Vencido</span>';
-            claseRow = 'table-danger';
-        } else {
-            estadoBadge = '<span class="badge bg-warning">Pendiente</span>';
-        }
-
-        // Permitir selección si se puede pagar
-        if (cuota.puedeSeleccionar && !cuota.pagado) {
-            cronogramaData = {};
-            seleccionable = `
-                <button class="btn btn-sm btn-primary" onclick="seleccionarCuotaParaPago(${cuota.numeroCuota}, '${cuota.fechaProgramada}', ${cuota.montoCuota}, ${cuota.capital}, ${cuota.interes}, ${cuota.mora},${cuota.domicilio}, ${cuota.saldoPendiente})">
-                    <i class="fas fa-hand-holding-usd"></i> Pagar
-                </button>
-            `;
-        }
 
         const fila = `
             <tr class="${claseRow}">
@@ -1516,70 +1574,72 @@ function mostrarCronogramaReal(cronograma) {
                 <td>${cuota.fechaProgramada}</td>
                 <td>$${parseFloat(cuota.montoCuota).toFixed(2)}</td>
                 <td>$${parseFloat(cuota.montoPagado).toFixed(2)}</td>
-                <td>${estadoBadge}</td>
                 <td>${cuota.fechaRealPago || '-'}</td>
-                <td class="text-center">${seleccionable}</td>
             </tr>
         `;
         tbody.append(fila);
+        $('#registroCobro').show();
+    });
+
+    $.ajax({
+        url: `/Auxiliares/GetPagoARealizar?idPrestamo=${idPrestamo}`,
+        method: 'GET',
+        success: function (response) {
+            datos = {};
+
+            if (response.success) {
+                datos = response.data;
+                $('#numeroCuota').val(datos.abonos);
+                $('#conceptoCobro').val('CUOTA_COMPLETA');
+
+                $('#montoCapital').val(datos.capitalPagar.toFixed(2));
+                $('#montoInteres').val(datos.interesPagar.toFixed(2));
+                $('#montoMora').val(0.00);
+                $('#montoDomicilio').val(datos.domiclioPagar.toFixed(2));
+
+                ajustarCamposCobro();
+            }
+        },
+        error: function () {
+            
+        }
     });
 }
 
-// NUEVA FUNCIÓN para seleccionar cuota específica para pago
-function seleccionarCuotaParaPago(numeroCuota, fechaProgramada, montoCuota, capital, interes, mora, domicilio, saldoPendiente) {
-    // Pre-llenar el formulario con los datos de la cuota seleccionada
-    $('#numeroCuota').val(numeroCuota);
-    $('#conceptoCobro').val('CUOTA_COMPLETA');
-    //registroCobro
-    cronogramaData =
-    {
-        numeroCuota: numeroCuota,
-        fechaProgramada: fechaProgramada,
-        montoCuota: montoCuota,
-        capital: capital,
-        interes: interes,
-        mora: mora,
-        domicilio: domicilio,
-        saldoPendiente: saldoPendiente
-    };
+function ajustarCamposCobro() {
 
-    $('#montoCapital').val(capital.toFixed(2));
-    $('#montoInteres').val(interes.toFixed(2));
-    $('#montoMora').val(mora.toFixed(2));
-    $('#montoDomicilio').val(domicilio.toFixed(2));
-    //justa y calcula
-    ajustarCamposCobro();
+    console.log(datos);
 
-
-    // Agregar campo oculto para identificar la cuota específica
-    if ($('#cuotaSeleccionada').length === 0) {
-        $('#formCobro').append(`<input type="hidden" id="cuotaSeleccionada" name="numeroCuotaSeleccionada" value="${numeroCuota}">`);
-        $('#formCobro').append(`<input type="hidden" id="fechaCuotaSeleccionada" name="fechaCuota" value="${fechaProgramada}">`);
-    } else {
-        $('#cuotaSeleccionada').val(numeroCuota);
-        $('#fechaCuotaSeleccionada').val(fechaProgramada);
+    const concepto = $('#conceptoCobro').val();
+    // Resetear campos
+    //$('#montoCapital, #montoInteres, #montoMora').val('').prop('disabled', false);
+    // Configurar campos según el concepto
+    switch (concepto) {
+        case 'CUOTA_COMPLETA':
+            $('#montoInteres').val(datos.interesPagar.toFixed(2) || '0.00');
+            $('#montoMora').val(0.00);
+            $('#montoCapital').val(datos.capitalPagar.toFixed(2) || '0.00');
+            $('#montoDomicilio').val(datos.domiclioPagar.toFixed(2) || '0.00');
+            $('#montoInteres, #montoMora, #montoCapital, #montoDomicilio').prop('disabled', true);
+            break;
+        case 'ABONO_PARCIAL':
+            // Solo capital habilitado
+            $('#montoInteres, #montoMora').val('0.00').prop('disabled', true);
+            $('#montoInteres').val(datos.interesPagar.toFixed(2) || '0.00');
+            $('#montoDomicilio').val(datos.domiclioPagar.toFixed(2) || '0.00');
+            $('#montoMora, #montoCapital').prop('disabled', false);
+            break;
     }
 
-    // Resaltar la cuota seleccionada
-    $('#tablaCronograma tr').removeClass('table-info');
-    $(`#tablaCronograma tr:contains("#${numeroCuota}")`).addClass('table-info');
-    $('#registroCobro').show();
-    // Scroll hasta el formulario
-    $('html, body').animate({
-        scrollTop: $("#formCobro").offset().top - 100
-    }, 500);
+    calcularTotal();
+}
 
-    Swal.fire({
-        title: '¡Cuota Seleccionada!',
-        html: `
-            <div class="text-center">
-                <h4>Cuota #${numeroCuota}</h4>
-                <p><strong>Fecha programada:</strong> ${fechaProgramada}</p>
-                <p><strong>Monto:</strong> $${montoCuota.toFixed(2)}</p>
-            </div>
-        `,
-        icon: 'success',
-        timer: 2000,
-        showConfirmButton: false
-    });
+function calcularTotal() {
+    const capital = parseFloat($('#montoCapital').val()) || 0;
+    const interes = parseFloat($('#montoInteres').val()) || 0;
+    const mora = parseFloat($('#montoMora').val()) || 0;
+    const domicilio = parseFloat($('#montoDomicilio').val()) || 0;
+
+    const total = capital + interes + mora + domicilio;
+    $('#montoTotal').val(total.toFixed(2));
 }

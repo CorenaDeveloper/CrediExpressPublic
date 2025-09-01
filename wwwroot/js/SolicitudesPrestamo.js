@@ -285,12 +285,12 @@ function calcularValoresEdicion() {
         let interesxTiempo = 0;
         let baseDomicilio = 0;
         let domicilioxTiempo = 0;
+        let factor = 0; 
 
         switch (tipoPrestamo.toUpperCase()) {
             case 'DIARIO':
-                if (cuotas > 30) {
-                    // Calcular meses completos
-                    let meses = Math.ceil(cuotas / 30);
+                if (cuotas >= 20) {
+                    let meses = cuotas / 20; // calcular meses completos
                     // Interes aplicado tasa diaria
                     baseInteres = (tasaInteresMensual / 100) / cuotas;
                     interesxTiempo = baseInteres * cuotas;
@@ -302,7 +302,9 @@ function calcularValoresEdicion() {
                     domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
 
                     domicilioxTiempo = domicilioxTiempo * meses;
-                } else {
+                    factor = meses;
+                }
+                else {
 
                     // Interes aplicado tasa diaria
                     baseInteres = (tasaInteresMensual / 100) / cuotas;
@@ -311,7 +313,7 @@ function calcularValoresEdicion() {
                     // domiciclio aplicado a tasa diaria
                     baseDomicilio = (tasaDomicilio / 100) / cuotas;
                     domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
-
+                    factor = 1;
                 }
 
                 break;
@@ -323,6 +325,7 @@ function calcularValoresEdicion() {
                 // Domicilio mensual equivalente a 4 semanas
                 baseDomicilio = (tasaDomicilio / 100) / 4;
                 domicilioxTiempo = baseDomicilio * cuotas;
+                factor = 1;
                 break;
 
             case 'QUINCENAL':
@@ -332,6 +335,7 @@ function calcularValoresEdicion() {
                 // Domicilio mensual equivalente a 2 semanas
                 baseDomicilio = (tasaDomicilio / 100) / 2;
                 domicilioxTiempo = baseDomicilio * cuotas;
+                factor = 1;
                 break;
 
             case 'MENSUAL':
@@ -342,6 +346,7 @@ function calcularValoresEdicion() {
                 // Domicilio 
                 baseDomicilio = (tasaDomicilio / 100) / 1;
                 domicilioxTiempo = baseDomicilio * cuotas;
+                factor = 1;
                 break;
         }
 
@@ -352,6 +357,7 @@ function calcularValoresEdicion() {
         const cuotaFinal = totalAPagar / cuotas;
 
         // Actualizar la vista
+        $('#txtFactor').val(factor.toFixed(2));
         $('#calcInteres').val(interesTotal.toFixed(2));
         $('#calcDomicilio').val(domicilioTotal.toFixed(2));
         $('#calcTotal').val(totalAPagar.toFixed(2));
@@ -382,7 +388,8 @@ $(document).on('click', '#btnGuardarCambios', function () {
         tasa: parseFloat($('#editTasa').val()),
         tasaDomicilio: parseFloat($('#editTasaDomicilio').val()),
         motivo: $('#editMotivo').val().trim(),
-        montoCuota: parseFloat($('#calcCuota').val())
+        montoCuota: parseFloat($('#calcCuota').val()),
+        factor: parseFloat($('#txtFactor').val())
     };
 
     // Confirmar cambios
@@ -1282,7 +1289,7 @@ $(document).ready(function () {
             // CREAR DOCUMENTO PDF CON LA ESTRUCTURA EXACTA DEL PAGARÉ
             const docDefinition = {
                 pageSize: 'LETTER',
-                pageMargins: [40, 40, 40, 40],
+                pageMargins: [30, 40, 30, 20],
                 defaultStyle: {
                     fontSize: 11,
                     lineHeight: 1.4
@@ -1389,6 +1396,7 @@ $(document).ready(function () {
                             { text: nit, decoration: 'underline' },
                             ' quien en este documento me denominaré "EL DEUDOR", OTORGO:'
                         ],
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 15]
                     },
@@ -1400,12 +1408,14 @@ $(document).ready(function () {
                             { text: montoEnLetras, decoration: 'underline' },
                             ' Dólares de los Estados Unidos de América'
                         ],
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 0]
                     },
 
                     {
                         text: 'II) DESTINO: El deudor destinara la cantidad recibida para capital de trabajo.',
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 0]
                     },
@@ -1417,12 +1427,14 @@ $(document).ready(function () {
                             ' DIAS contados a partir de esta fecha, plazo que vence el día ',
                             { text: `${diaVencimiento} de ${mesVencimiento} de ${añoVencimiento}`, decoration: 'underline' }
                         ],
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 0]
                     },
 
                     {
                         text: 'IV) FORMA DE PAGO: El Deudor podrá amortizar a la deuda en cualquier momento antes del vencimiento del plazo',
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 0]
                     },
@@ -1435,46 +1447,49 @@ $(document).ready(function () {
                             { text: '    ', decoration: 'underline' },
                             ') Todo cálculo de intereses se hará sobre la base de un año calendario, por el actual número de días hasta el pago del crédito incluyendo el primero y excluyendo el ultimo día que ocurra durante el periodo en que dichos intereses deben pagarse. En caso de mora sin perjuicio del derecho del ACREEDOR a entablar acción ejecutiva, la tasa de interés se aumentara en tres puntos porcentuales por arriba de la tasa vigente y se calculara sobre saldos de capital en mora, sin que ello signifique prórroga del plazo y sin perjuicio de los demás efectos legales de la mora'
                         ],
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 0]
                     },
 
                     {
                         text: 'VI) LUGAR E IMPUTACION DE PAGOS: Todo pago será recibido en el domicilio del negocio del DEUDOR, se imputara primeramente a intereses, luego a los recargos y el saldo remanente, si lo hubiere al capital.',
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 0]
                     },
 
                     {
                         text: 'VII) PROCEDENCIA DE LOS FONDOS: Los fondos provenientes de este crédito son propios de CREDI-EXPRESS DE EL SALVADOR SOCIEDAD ANONIMA DE CAPITAL VARIABLE: Las partes declaran que tanto el efectivo recibido o cualquier otro medio de pago, con el que el Deudor pagara su obligación crediticia tiene procedencia LICITA',
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 0]
                     },
 
                     {
                         text: 'VIII) CADUCIDAD DEL PLAZO: La obligación se volverá exigible inmediatamente y en su totalidad al final del plazo establecido en este contrato y por incumplimiento por parte del Deudor en cualquiera de las obligaciones que ha contraído por medio de este instrumento, también podrá exigirse el pago total por acción judicial contra el DEUDOR iniciada por terceros o por el mismo ACREEDOR',
-
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 0]
                     },
 
                     {
                         text: 'IX) HONORARIOS Y GASTOS: Serán por cuenta del DEUDOR los gastos honorarios de este instrumento, así como todos los gastos en que el ACREEDOR tenga que incurrir para el cobro de mismo',
-
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 0]
                     },
 
                     {
                         text: 'X) DOMICILIO Y RENUNCIAS: Para los efectos legales de este contrato, el DEUDOR señala la ciudad de Sonsonate como domicilio especial, a la jurisdicción de cuyos tribunales judiciales se someten expresamente. El ACREEDOR: será depositario de los bienes que se embarquen, sin la obligación de rendir fianza quien podra designar un representante para tal efecto',
-
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 0]
                     },
 
                     {
                         text: 'XI) GARANTIAS: PRENDARIA, En garantía de la presente obligación EL DEUDOR constituirá PRENDA SIN DESPLAZAMIENTO a favor del ACREEDOR sobre los bienes descritos en el anexo 1 de este instrumento, el cual ha sido firmado por él y por agente del ACREEDOR y que forma parte del presente instrumento los bienes prendados radicaran en un inmueble ubicado en el domicilio del DEUDOR. La prenda que constituirá EL DEUDOR a favor del ACREEDOR, Estará vigente durante el plazo del presente contrato y mientras existan saldos pendientes de pago a cargo del DEUDOR y a favor del ACREEDOR: El DEUDOR deberá mantener el valor de la prenda durante la vigencia del presente crédito, para lo cual se obliga a realizar las sustituciones o renovaciones de los bienes que fueren necesarias, todo a efecto de salvaguardar el derecho preferente sobre la prenda si los bienes en garantía se sustituyeses o deteriorases, al grado que no seas suficiente para garantizar la obligación del DEUDOR el ACREEDOR tendrá derecho a exigir mejoras en la garantía, y si el DEUDOR no se allanare a ello, o no pudiere cumplir con tal requisito vencerá el plazo de este contrato y la obligación se volverá exigible en su totalidad como de plazo vencido El ACREEDOR en cualquier momento durante la vigencia del presente crédito podrá inspeccionar y revisar dichos bienes, por medio de sus empleados y si encontrare deficiencia, podrá exigir que se corrijan los defectos y El DEUDOR se obliga por este medio a aceptar la reclamación del ACREEDOR.',
-  
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 10]
                     },
@@ -1489,7 +1504,7 @@ $(document).ready(function () {
                             ' del año ',
                             { text: año.toString(), decoration: 'underline' }
                         ],
-      
+                        fontSize: 9,
                         alignment: 'justify',
                         margin: [0, 0, 0, 30]
                     },
@@ -1499,7 +1514,7 @@ $(document).ready(function () {
                             'F',
                             { text: '                                      ', decoration: 'underline' }
                         ],
-                        fontSize: 10,
+                        fontSize: 9,
                         alignment: 'center'
                     }
                 ]
@@ -1514,11 +1529,6 @@ $(document).ready(function () {
                     html: `
                     <div class="mb-3">
                         <iframe src="${dataUrl}" width="100%" height="400px"></iframe>
-                    </div>
-                    <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-primary" onclick="window.open('${dataUrl}')">
-                            <i class="fas fa-external-link-alt me-1"></i>Abrir en nueva pestaña
-                        </button>
                     </div>
                 `,
                     width: '80%',
@@ -1645,11 +1655,6 @@ $(document).ready(function () {
                     html: `
                     <div class="mb-3">
                         <iframe src="${dataUrl}" width="100%" height="400px"></iframe>
-                    </div>
-                    <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-primary" onclick="window.open('${dataUrl}')">
-                            <i class="fas fa-external-link-alt me-1"></i>Abrir en nueva pestaña
-                        </button>
                     </div>
                 `,
                     width: '80%',
