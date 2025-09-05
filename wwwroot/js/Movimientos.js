@@ -119,7 +119,7 @@ $(document).ready(function () {
         });
 
         $.ajax({
-            url: '/Auxiliares/ProcesarDesembolso',
+            url: '/Crud/ProcesarDesembolso',
             method: 'POST',
             data: {
                 numeroSolicitud: numeroSolicitud,
