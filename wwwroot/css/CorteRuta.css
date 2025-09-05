@@ -61,24 +61,6 @@
         color: white;
     }
 
-.detail-table {
-    background: white;
-    border-radius: 15px;
-    overflow: hidden;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-}
-
-    .detail-table th {
-        background: #667eea;
-        color: white;
-        border: none;
-        font-weight: 600;
-    }
-
-    .detail-table td {
-        border-color: #e9ecef;
-        vertical-align: middle;
-    }
 
 .status-badge {
     padding: 8px 16px;
@@ -181,8 +163,3 @@ body.printing {
     -webkit-print-color-adjust: exact;
 }
 
-.printing .table th {
-    background: #667eea !important;
-    color: white !important;
-    -webkit-print-color-adjust: exact;
-}

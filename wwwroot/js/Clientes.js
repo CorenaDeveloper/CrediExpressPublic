@@ -171,6 +171,7 @@ function cargarClientes() {
                            data-fotonegocio4="${row.fotoNegocio4}"
                            data-duifrente="${row.duiFrente}"
                            data-duiatras="${row.duiDetras}"
+                           data-distrito="${row.distrito}"
                            data-profesion="${row.profesion}">
                             <i class="fas fa-eye"></i>
                         </a>`;
@@ -214,6 +215,8 @@ function cargarClientes() {
                            data-fotonegocio4="${row.fotoNegocio4}"
                            data-duifrente="${row.duiFrente}"
                            data-duidetras="${row.duiDetras}"
+                           data-duidetras="${row.duiDetras}"
+                           data-distrito="${row.distrito}"
                            data-profesion="${row.profesion}">
                             <i class="fas fa-edit"></i>
                         </a>`;
@@ -337,6 +340,7 @@ $(document).ready(function () {
         modal.find('#modalFechaNacimiento').text(button.data('fechanacimiento'));
         modal.find('#modalDepartamento').text(button.data('departamento'));
         modal.find('#modalNombreDepartamento').text(button.data('nombredepartamento'));
+        modal.find('#modalNombreDistrito').text(button.data('distrito'));
         modal.find('#modalGiro').text(button.data('giro'));
         modal.find('#modalTipoPer').text(button.data('tipopersonalidad'));
         modal.find('#modalActivo').text(activo === 1 ? 'Sí' : 'No');
@@ -484,6 +488,7 @@ $('#editarClienteModal').on('show.bs.modal', function (event) {
     modal.find('#editProfesion').val(button.data('profesion'));
     modal.find('#editDepartamento').val(idDepartamento);
     modal.find('#editGenero').val(button.data('genero'));
+    modal.find('#editDistrito').val(button.data('distrito'));
     modal.find('#editEmail').val(button.data('email'));
     modal.find('#editActivo').prop('checked', button.data('activo') == 1);
     modal.find('#editTipoPer').prop('checked', button.data('tipoper') == 1);

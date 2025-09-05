@@ -1,0 +1,750 @@
+﻿// Variables globales
+let clienteActual = null;
+let prestamosHistorial = [];
+
+//============================================
+// 🔍 BÚSQUEDA DE CLIENTE 
+//============================================
+function busquedaCliente() {
+    const dui = $('#dui').val().trim();
+    const nombreApellido = $('#nombreApellido').val().trim();
+    $("#tipoPrestamo").val("DIARIO");
+
+    if (!dui && !nombreApellido) {
+        Swal.fire("Error", "Ingrese un DUI o Nombre/Apellido para buscar", "error");
+        return;
+    }
+
+    showLoadingSpinner();
+    limpiarDatosCliente();
+
+    $.ajax({
+        url: `/Auxiliares/BuscarCliente?dui=${encodeURIComponent(dui)}&nombreApellido=${encodeURIComponent(nombreApellido)}`,
+        method: 'GET',
+        success: function (resp) {
+            hideLoadingSpinner();
+
+            if (!resp || (Array.isArray(resp) && resp.length === 0)) {
+                Swal.fire("Error", "No se encuentra cliente registrado.", "error");
+                return;
+            }
+
+            // ✅ Si viene objeto único (DUI exacto)
+            if (!Array.isArray(resp)) {
+                clienteActual = resp;
+                mostrarDatosCliente(resp);
+                cargarHistorialPrestamos(resp.id);
+            }
+            // ✅ Si viene lista (por nombre o apellido)
+            else {
+                mostrarCardSeleccionClientes(resp);
+            }
+        },
+        error: function (xhr, status, error) {
+            hideLoadingSpinner();
+            Swal.fire("Error", "Error al consultar los datos del cliente", error);
+        }
+    });
+}
+//============================================
+//============================================
+
+
+
+
+// 📊 MOSTRAR DATOS DEL CLIENTE
+function mostrarCardSeleccionClientes(clientes) {
+    let clientesHTML = '';
+
+    clientes.forEach(cliente => {
+        const nombreCompleto = `${cliente.nombre || ''} ${cliente.apellido || ''}`.trim();
+
+        clientesHTML += `
+            <div class="col-md-6 mb-3">
+                <div class="card h-100" style="cursor: pointer;" onclick="seleccionarClienteDetalle(${cliente.id})">
+                    <div class="card-body">
+                        <h6 class="card-title">${nombreCompleto}</h6>
+                        <p class="card-text mb-1"><strong>DUI:</strong> ${cliente.dui || 'Sin DUI'}</p>
+                        <p class="card-text mb-0"><small class="text-muted">${cliente.telefono || cliente.celular || 'Sin teléfono'}</small></p>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    $('#clientesEncontrados').html(`
+        <div class="row">
+            ${clientesHTML}
+        </div>
+    `);
+
+    hideLoadingSpinner();
+    // Guardar clientes para selección posterior
+    window.clientesTemp = clientes;
+
+    // Mostrar la card de selección
+    $('#rowSeleccionCliente').show();
+}
+
+function seleccionarClienteDetalle(clienteId) {
+    const cliente = window.clientesTemp.find(c => c.id === clienteId);
+
+    if (cliente) {
+        clienteActual = cliente;
+        $('#rowSeleccionCliente').hide();
+        mostrarDatosCliente(cliente);
+        cargarHistorialPrestamos(cliente.id);
+    }
+}
+
+function mostrarDatosCliente(cliente) {
+    // Información básica
+    $("#clienteNombre").html(`${cliente.nombre || ''} ${cliente.apellido || ''}`.trim());
+    $("#clienteDui").html(cliente.dui || "Sin DUI");
+    $("#clienteNit").html(cliente.nit || "Sin NIT");
+    $("#clienteTelefono").html(cliente.telefono || cliente.celular || "Sin teléfono");
+    $("#clienteDireccion").html(cliente.direccion || "Sin dirección");
+    $("#clienteGestor").html(cliente.gestorNombre || "Sin gestor asignado");
+    $("#clienteFechaIngreso").html(cliente.fechaIngreso || "No registrada");
+    $("#txtIdCliente").val(cliente.id);
+
+    // Estado del cliente
+    const activo = cliente.activo === 1;
+    const cardElement = document.getElementById('clienteInfoCard');
+    const estadoBadge = document.getElementById('clienteEstadoBadge');
+    const estadoTexto = document.getElementById('clienteEstadoTexto');
+
+    if (cardElement && estadoBadge && estadoTexto) {
+        if (activo) {
+            cardElement.className = 'cliente-info-card cliente-activo';
+            estadoTexto.textContent = 'Cliente Activo';
+            estadoBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i>Cliente Activo';
+        } else {
+            cardElement.className = 'cliente-info-card cliente-inactivo';
+            estadoTexto.textContent = 'Cliente Inactivo';
+            estadoBadge.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Cliente Inactivo';
+
+            // Mostrar advertencia
+            mostrarAdvertencia('El cliente está marcado como INACTIVO. Verifique antes de continuar.', 'warning');
+        }
+    }
+
+    $('#rowDetalleCliente').show();
+    
+}
+
+// 📈 CARGAR HISTORIAL DE PRÉSTAMOS
+function cargarHistorialPrestamos(idCliente) {
+    $.ajax({
+        url: `/Auxiliares/GetPrestamosXCliente?idCliente=${idCliente}`,
+        method: 'GET',
+        success: function (data) {
+            let prestamos = [];
+            let prestamosActivos = [];
+            if (data && data.success && data.data && Array.isArray(data.data)) {
+                prestamos = data.data;
+            } else if (data && Array.isArray(data)) {
+                prestamos = data;
+            }
+            prestamosHistorial = prestamos;
+            prestamosActivos = prestamos.filter(p => p.aprobado == 1);
+            actualizarResumenCliente(prestamosActivos);
+            //mostrarHistorialPrestamos(prestamos);
+            validarNuevoPrestamo(prestamos);
+            $('#rowDetallePrestamo').show();
+            hideLoadingSpinner();
+        },
+        error: function (xhr, status, error) {
+            console.error('Error al cargar historial:', error);
+            $('#rowDetallePrestamo').show();
+            hideLoadingSpinner();
+        }
+    });
+}
+
+// 📊 ACTUALIZAR RESUMEN DEL CLIENTE
+function actualizarResumenCliente(prestamos) {
+    const prestamosActivos = prestamos.filter(p => p.estado === 'A').length;
+    const totalPrestado = prestamos.reduce((sum, p) => sum + (p.monto || 0), 0);
+    const saldoPendiente = prestamos
+        .filter(p => p.estado === 'A')
+        .reduce((sum, p) => sum + (p.monto || 0), 0); // Aquí deberías calcular el saldo real
+
+    $('#prestamosActivos').text(prestamosActivos);
+    $('#totalPrestado').text('$' + totalPrestado.toFixed(2));
+    $('#saldoPendiente').text('$' + saldoPendiente.toFixed(2));
+    $('#clientePrestamosCount').text(`${prestamos.length} Préstamos`);
+
+    // Determinar estado crediticio
+    let estadoCredito = 'Nuevo';
+    let badgeClass = 'bg-secondary';
+
+    if (prestamos.length > 0) {
+        if (prestamosActivos > 2) {
+            estadoCredito = 'Alto Riesgo';
+            badgeClass = 'bg-danger';
+        } else if (prestamosActivos > 0) {
+            estadoCredito = 'Activo';
+            badgeClass = 'bg-warning';
+        } else {
+            estadoCredito = 'Bueno';
+            badgeClass = 'bg-success';
+        }
+    }
+
+    $('#historialEstado').text(estadoCredito).className = `badge ${badgeClass}`;
+}
+
+
+// VALIDAR NUEVO PRÉSTAMO
+function validarNuevoPrestamo(prestamos) {
+    const prestamosActivos = prestamos.filter(p => p.estado === 'A');
+    const container = $('#advertenciasCliente');
+
+    if (prestamosActivos.length > 0) {
+        let mensaje = `
+            <div class="warning-box">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Advertencias:</h6>
+                <ul class="mb-0">
+                    <li>El cliente tiene <strong>${prestamosActivos.length} préstamo(s) activo(s)</strong></li>
+        `;
+
+        if (prestamosActivos.length >= 3) {
+            mensaje += `<li class="text-danger">⚠️ <strong>ALTO RIESGO:</strong> Cliente con múltiples préstamos activos</li>`;
+        }
+
+        mensaje += `
+                    <li>Verifique la capacidad de pago antes de aprobar</li>
+                </ul>
+            </div>
+        `;
+
+        container.html(mensaje).show();
+    }
+}
+
+
+// 🧮 FUNCIÓN MEJORADA PARA CALCULAR CUOTA CON INTERÉS SIMPLE
+//function calcularCuota() {
+//    const monto = parseFloat($('#txtMonto').val()) || 0;
+//    const tasaInteresMensual = parseFloat($('#txtPorcentaje').val()) || 0;
+//    const tasaDomicilio = parseFloat($('#txtPorcentajeDomicilio').val()) || 0;
+//    const cuotas = parseInt($('#txtCuotas').val()) || 0;
+//    const tipoPrestamo = $('#tipoPrestamo').val() || 'MENSUAL';
+
+//    if (monto > 0 && cuotas > 0) {
+//        // Determinar días por período según tipo de préstamo
+//        let baseInteres = 0;
+//        let interesxTiempo = 0;
+//        let baseDomicilio = 0;
+//        let domicilioxTiempo = 0;
+//        let factor = 0;
+
+//        switch (tipoPrestamo.toUpperCase()) {
+//            case 'DIARIO':
+//                //20 es un mes en dias habiles asi quye el calculo es proporcional a 30 dias
+//                if (cuotas >= 20) {
+//                    let meses = cuotas / 20; // calcular meses completos
+//                    // Interes aplicado tasa diaria
+//                    baseInteres = (tasaInteresMensual / 100) / cuotas;
+//                    interesxTiempo = baseInteres * cuotas;
+
+//                    interesxTiempo = interesxTiempo * meses;
+
+//                    // domiciclio aplicado a tasa diaria
+//                    baseDomicilio = (tasaDomicilio / 100) / cuotas;
+//                    domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
+
+//                    domicilioxTiempo = domicilioxTiempo * meses;
+//                    factor = meses;
+//                }
+//                else {
+
+//                    // Interes aplicado tasa diaria
+//                    baseInteres = (tasaInteresMensual / 100) / cuotas;
+//                    interesxTiempo = baseInteres * cuotas;
+
+//                    // domiciclio aplicado a tasa diaria
+//                    baseDomicilio = (tasaDomicilio / 100) / cuotas;
+//                    domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
+//                    factor = 1;
+//                }
+
+//                break;
+//            case 'SEMANAL':
+
+//                // Interes mensual equivalente a 4 semanas
+//                baseInteres = (tasaInteresMensual / 100) / 4;
+//                interesxTiempo = baseInteres * cuotas;
+
+//                // domiciclio mensual equivalente a 4 semanas
+//                baseDomicilio = (tasaDomicilio / 100) / 4;
+//                domicilioxTiempo = baseDomicilio * cuotas;
+//                factor = 1;
+
+//                break;
+//            case 'QUINCENAL':
+
+//                // Interes mensual equivalente a 2 semanas
+//                baseInteres = (tasaInteresMensual / 100) / 2;
+//                interesxTiempo = baseInteres * cuotas;
+
+//                // domiciclio mensual equivalente a 2 semanas
+//                baseDomicilio = (tasaDomicilio / 100) / 2;
+//                domicilioxTiempo = baseDomicilio * cuotas;
+//                factor = 1;
+
+//                break;
+//            case 'MENSUAL':
+//            default:
+
+//                // Interes mensual
+//                baseInteres = (tasaInteresMensual / 100) / 1;
+//                interesxTiempo = baseInteres * cuotas;
+
+//                // domiciclio
+//                baseDomicilio = (tasaDomicilio / 100) / 1;
+//                domicilioxTiempo = baseDomicilio * cuotas;
+//                factor = 1;
+
+//                break;
+//        }
+
+
+//        // total a pagar
+//        const interesTotal = interesxTiempo * monto;
+//        const domicilioTotal = domicilioxTiempo * monto;
+//        const totalAPagar = monto + interesTotal + domicilioTotal;
+
+//        const cuotaFinal = totalAPagar / cuotas;
+//        //txtFactor
+//        // Actualizar campos ocultos
+//        $('#txtFactor').val(factor.toFixed(2));
+//        $('#txtCuotasMonto').val(cuotaFinal.toFixed(2));
+//        $('#txtInteres').val(interesTotal.toFixed(2));
+//        $('#txtDomicilio').val(domicilioTotal.toFixed(2));
+
+//        // Actualizar calculadora visual
+//        $('#resumenMonto').text('$' + monto.toFixed(2));
+//        $('#resumenInteres').text('$' + interesTotal.toFixed(2));
+//        $('#resumenDomicilio').text('$' + domicilioTotal.toFixed(2));
+//        $('#resumenTotal').text('$' + totalAPagar.toFixed(2));
+
+//        $('#calculadoraVisual').show();
+
+//    } else {
+//        $('#txtCuotasMonto').val('');
+//        $('#calculadoraVisual').hide();
+//        limpiarValidaciones();
+//    }
+//}
+
+// 🧮 FUNCIÓN UNIFICADA PARA CALCULAR CUOTA Y OBTENER DATOS
+function calcularCuota() {
+    const monto = parseFloat($('#txtMonto').val()) || 0;
+    const tasaInteresMensual = parseFloat($('#txtPorcentaje').val()) || 0;
+    const tasaDomicilio = parseFloat($('#txtPorcentajeDomicilio').val()) || 0;
+    const cuotas = parseInt($('#txtCuotas').val()) || 0;
+    const tipoPrestamo = $('#tipoPrestamo').val() || 'MENSUAL';
+
+    if (monto > 0 && cuotas > 0) {
+        // Determinar días por período según tipo de préstamo
+        let baseInteres = 0;
+        let interesxTiempo = 0;
+        let baseDomicilio = 0;
+        let domicilioxTiempo = 0;
+        let factor = 0;
+
+        switch (tipoPrestamo.toUpperCase()) {
+            case 'DIARIO':
+                //20 es un mes en dias habiles asi que el calculo es proporcional a 30 dias
+                if (cuotas >= 20) {
+                    let meses = cuotas / 20; // calcular meses completos
+                    // Interes aplicado tasa diaria
+                    baseInteres = (tasaInteresMensual / 100) / cuotas;
+                    interesxTiempo = baseInteres * cuotas;
+
+                    interesxTiempo = interesxTiempo * meses;
+
+                    // domiciclio aplicado a tasa diaria
+                    baseDomicilio = (tasaDomicilio / 100) / cuotas;
+                    domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
+
+                    domicilioxTiempo = domicilioxTiempo * meses;
+                    factor = meses;
+                }
+                else {
+
+                    // Interes aplicado tasa diaria
+                    baseInteres = (tasaInteresMensual / 100) / cuotas;
+                    interesxTiempo = baseInteres * cuotas;
+
+                    // domiciclio aplicado a tasa diaria
+                    baseDomicilio = (tasaDomicilio / 100) / cuotas;
+                    domicilioxTiempo = baseDomicilio * cuotas; // se divide para sacar el interes por cuota
+                    factor = 1;
+                }
+
+                break;
+            case 'SEMANAL':
+
+                // Interes mensual equivalente a 4 semanas
+                baseInteres = (tasaInteresMensual / 100) / 4;
+                interesxTiempo = baseInteres * cuotas;
+
+                // domiciclio mensual equivalente a 4 semanas
+                baseDomicilio = (tasaDomicilio / 100) / 4;
+                domicilioxTiempo = baseDomicilio * cuotas;
+                factor = 1;
+
+                break;
+            case 'QUINCENAL':
+
+                // Interes mensual equivalente a 2 semanas
+                baseInteres = (tasaInteresMensual / 100) / 2;
+                interesxTiempo = baseInteres * cuotas;
+
+                // domiciclio mensual equivalente a 2 semanas
+                baseDomicilio = (tasaDomicilio / 100) / 2;
+                domicilioxTiempo = baseDomicilio * cuotas;
+                factor = 1;
+
+                break;
+            case 'MENSUAL':
+            default:
+
+                // Interes mensual
+                baseInteres = (tasaInteresMensual / 100) / 1;
+                interesxTiempo = baseInteres * cuotas;
+
+                // domiciclio 
+                baseDomicilio = (tasaDomicilio / 100) / 1;
+                domicilioxTiempo = baseDomicilio * cuotas;
+                factor = 1;
+
+                break;
+        }
+
+
+        // total a pagar
+        const interesTotal = interesxTiempo * monto;
+        const domicilioTotal = domicilioxTiempo * monto;
+        const totalAPagar = monto + interesTotal + domicilioTotal;
+
+        const cuotaFinal = totalAPagar / cuotas;
+
+        // Actualizar campos ocultos
+        $('#txtFactor').val(factor.toFixed(2));
+        $('#txtCuotasMonto').val(cuotaFinal.toFixed(2));
+        $('#txtInteres').val(interesTotal.toFixed(2));
+        $('#txtDomicilio').val(domicilioTotal.toFixed(2));
+
+        // Actualizar calculadora visual
+        $('#resumenMonto').text('$' + monto.toFixed(2));
+        $('#resumenInteres').text('$' + interesTotal.toFixed(2));
+        $('#resumenDomicilio').text('$' + domicilioTotal.toFixed(2));
+        $('#resumenTotal').text('$' + totalAPagar.toFixed(2));
+
+        $('#calculadoraVisual').show();
+
+    } else {
+        $('#txtCuotasMonto').val('');
+        $('#calculadoraVisual').hide();
+        limpiarValidaciones();
+    }
+}
+
+// 📊 FUNCIÓN PARA OBTENER DATOS (reutiliza calcularCuota)
+function obtenerDatosPrestamo() {
+    // Ejecutar el cálculo primero
+    calcularCuota();
+
+    // Ahora leer los valores ya calculados
+    const monto = parseFloat($('#txtMonto').val()) || 0;
+    const tasaInteresMensual = parseFloat($('#txtPorcentaje').val()) || 0;
+    const tasaDomicilio = parseFloat($('#txtPorcentajeDomicilio').val()) || 0;
+    const cuotas = parseInt($('#txtCuotas').val()) || 0;
+    const tipoPrestamo = $('#tipoPrestamo').val() || 'MENSUAL';
+
+    // Leer valores calculados
+    const interesTotal = parseFloat($('#txtInteres').val()) || 0;
+    const domicilioTotal = parseFloat($('#txtDomicilio').val()) || 0;
+    const cuotaFinal = parseFloat($('#txtCuotasMonto').val()) || 0;
+    const totalAPagar = monto + interesTotal + domicilioTotal;
+
+    return {
+        cliente: {
+            nombre: $('#clienteNombre').text(),
+            dui: $('#clienteDui').text(),
+            telefono: $('#clienteTelefono').text(),
+            activo: clienteActual?.activo === 1
+        },
+        prestamo: {
+            monto: monto,
+            tasa: tasaInteresMensual,
+            tasaDomicilio: tasaDomicilio,
+            cuotas: cuotas,
+            tipo: tipoPrestamo,
+            fecha: $('#txtfechaPrestamo').val()
+        },
+        calculos: {
+            interesTotal: interesTotal,
+            domicilioTotal: domicilioTotal,
+            totalAPagar: totalAPagar,
+            cuotaMensual: cuotaFinal
+        }
+    };
+}
+
+
+// 🧹 LIMPIAR VALIDACIONES
+function limpiarValidaciones() {
+    const container = $('#advertenciasCliente');
+    let advertencias = container.html() || '';
+    advertencias = advertencias.replace(/<li class="text-warning">.*?<\/li>/gi, '');
+
+    if (advertencias.trim()) {
+        container.html(advertencias);
+    } else {
+        container.hide();
+    }
+}
+
+// 👁️ PREVISUALIZAR PRÉSTAMO
+function previsualizarPrestamo() {
+    if (!validarFormulario()) {
+        return;
+    }
+
+    const datos = obtenerDatosPrestamo();
+    const contenido = generarPreview(datos);
+
+    $('#previewContent').html(contenido);
+    $('#modalPreview').modal('show');
+}
+
+// 📋 GENERAR PREVIEW DEL PRÉSTAMO
+function generarPreview(datos) {
+    return `
+        <div class="row">
+            <div class="col-md-6">
+                <h6><i class="fas fa-user me-2"></i>Información del Cliente</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Nombre:</strong></td><td>${datos.cliente.nombre}</td></tr>
+                    <tr><td><strong>DUI:</strong></td><td>${datos.cliente.dui}</td></tr>
+                    <tr><td><strong>Teléfono:</strong></td><td>${datos.cliente.telefono}</td></tr>
+                    <tr><td><strong>Estado:</strong></td><td>${datos.cliente.activo ? 'Activo' : 'Inactivo'}</td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6><i class="fas fa-calculator me-2"></i>Detalles del Préstamo</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Monto:</strong></td><td>${datos.prestamo.monto.toFixed(2)}</td></tr>
+                    <tr><td><strong>Tasa Interés:</strong></td><td>${datos.prestamo.tasa}%</td></tr>
+                    <tr><td><strong>Tasa Domicilio:</strong></td><td>${datos.prestamo.tasaDomicilio}%</td></tr>
+                    <tr><td><strong>Cuotas:</strong></td><td>${datos.prestamo.cuotas}</td></tr>
+                    <tr><td><strong>Tipo:</strong></td><td>${datos.prestamo.tipo}</td></tr>
+                </table>
+            </div>
+        </div>
+        <hr>
+        <div class="row">
+            <div class="col-12">
+                <h6><i class="fas fa-chart-pie me-2"></i>Resumen Financiero</h6>
+                <div class="row text-center">
+                    <div class="col-md-3 mb-3">
+                        <div class="p-3 bg-primary text-white rounded">
+                           <h5>$${datos.prestamo.monto.toFixed(2)}</h5>
+                            <small>Capital</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="p-3 bg-info text-white rounded">
+                            <h5>${datos.calculos.interesTotal.toFixed(2)}</h5>
+                            <small>Interés Total</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="p-3 bg-warning text-white rounded">
+                            <h5>${datos.calculos.domicilioTotal.toFixed(2)}</h5>
+                            <small>Domicilio Total</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="p-3 bg-success text-white rounded">
+                            <h5>${datos.calculos.totalAPagar.toFixed(2)}</h5>
+                            <small>Total a Pagar</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3 p-3 bg-light rounded">
+                    <h5 class="text-center">Cuota: ${datos.calculos.cuotaMensual.toFixed(2)}</h5>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ✅ VALIDAR FORMULARIO
+function validarFormulario() {
+    const monto = parseFloat($('#txtMonto').val());
+    const tasa = parseFloat($('#txtPorcentaje').val());
+    const tasaDomicilio = parseFloat($('#txtPorcentajeDomicilio').val());
+    const cuotas = parseInt($('#txtCuotas').val());
+    const fecha = $('#txtfechaPrestamo').val();
+
+    if (!clienteActual) {
+        Swal.fire("Error", "Debe seleccionar un cliente válido", "error");
+        return false;
+    }
+
+    if (!monto || monto <= 0) {
+        Swal.fire("Error", "El monto debe ser mayor a $0", "error");
+        $('#txtMonto').focus();
+        return false;
+    }
+
+    if (!tasa || tasa <= 0) {
+        Swal.fire("Error", "La tasa de interés debe ser mayor a 0%", "error");
+        $('#txtPorcentaje').focus();
+        return false;
+    }
+
+    if (!cuotas || cuotas <= 0) {
+        Swal.fire("Error", "El número de cuotas debe ser mayor a 0", "error");
+        $('#txtCuotas').focus();
+        return false;
+    }
+
+    if (!fecha) {
+        Swal.fire("Error", "Debe seleccionar una fecha para el préstamo", "error");
+        $('#txtfechaPrestamo').focus();
+        return false;
+    }
+
+    return true;
+}
+
+// ✅ CONFIRMAR CREACIÓN
+function confirmarCreacion() {
+    $('#modalPreview').modal('hide');
+
+    Swal.fire({
+        title: '¿Crear Solicitud de Préstamo?',
+        text: 'Se enviará la solicitud para revisión y aprobación',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, Crear Solicitud',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $('#formNuevoPrestamo').submit();
+        }
+    });
+}
+
+// 🧹 LIMPIAR FORMULARIO
+function limpiarFormulario() {
+    // Limpiar datos del cliente
+    limpiarDatosCliente();
+
+    // Limpiar formulario de préstamo
+    $('#formNuevoPrestamo')[0].reset();
+    $('#txtfechaPrestamo').val(new Date().toISOString().split('T')[0]);
+
+    // Ocultar secciones
+    $('#rowDetalleCliente').hide();
+    //$('#rowHistorialPrestamos').hide();
+    $('#rowDetallePrestamo').hide();
+    $('#calculadoraVisual').hide();
+    $('#advertenciasCliente').hide();
+    $('#rowSeleccionCliente').hide();
+    $('#advertenciasCliente').hide().empty();
+    // Focus en DUI
+    $('#dui').focus();
+
+    // Reset variables
+    clienteActual = null;
+    prestamosHistorial = [];
+}
+
+// 🧹 LIMPIAR DATOS DEL CLIENTE
+function limpiarDatosCliente() {
+    $('#clienteNombre, #clienteDui, #clienteNit, #clienteTelefono, #clienteDireccion, #clienteGestor, #clienteFechaIngreso').text('');
+    $('#txtIdCliente').val('');
+    $('#prestamosActivos, #totalPrestado, #saldoPendiente').text('0');
+    $('#clientePrestamosCount').text('0 Préstamos');
+    $('#listaPrestamosHistorial').empty();
+    $('#advertenciasCliente').hide().empty();
+}
+
+// 👁️ TOGGLE HISTORIAL
+function toggleHistorial() {
+    $('#historialContent').toggle();
+}
+
+// 🚨 MOSTRAR ADVERTENCIA
+function mostrarAdvertencia(mensaje, tipo = 'warning') {
+    const alertClass = tipo === 'warning' ? 'alert-warning' :
+        tipo === 'danger' ? 'alert-danger' : 'alert-info';
+
+    const icono = tipo === 'warning' ? 'fas fa-exclamation-triangle' :
+        tipo === 'danger' ? 'fas fa-times-circle' : 'fas fa-info-circle';
+
+    const html = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            <i class="${icono} me-2"></i>${mensaje}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+
+    $('#advertenciasCliente').html(html).show();
+}
+
+// 📱 EVENT LISTENERS
+$(document).ready(function () {
+    // Auto-cálculo cuando cambien los valores
+    $('#txtMonto, #txtPorcentaje, #txtPorcentajeDomicilio, #txtCuotas, #tipoPrestamo').on('input', calcularCuota);
+
+    // Enter en DUI para buscar
+    $('#dui').on('keypress', function (e) {
+        if (e.which === 13) {
+            getCliente();
+        }
+    });
+
+    // Validar monto máximo
+    $('#txtMonto').on('blur', function () {
+        const monto = parseFloat($(this).val());
+        if (monto > 50000) {
+            Swal.fire({
+                title: 'Monto Muy Alto',
+                text: '¿Está seguro de que el monto de $' + monto.toFixed(2) + ' es correcto?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, es correcto',
+                cancelButtonText: 'Corregir'
+            }).then((result) => {
+                if (!result.isConfirmed) {
+                    $('#txtMonto').focus().select();
+                }
+            });
+        }
+    });
+
+    // Validar envío del formulario
+    $('#formNuevoPrestamo').on('submit', function (e) {
+        if (!validarFormulario()) {
+            e.preventDefault();
+            return false;
+        }
+
+        // Mostrar loading en el botón
+        $('#btnSubmit').html('<i class="fas fa-spinner fa-spin me-2"></i>Creando...').prop('disabled', true);
+    });
+
+    // Inicializar fecha
+    $('#txtfechaPrestamo').val(new Date().toISOString().split('T')[0]);
+});

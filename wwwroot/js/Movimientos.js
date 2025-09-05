@@ -1,23 +1,24 @@
-﻿let tabla;
-let cronogramaData = {};
-let datos = {};
+﻿let tabla, listaPrtamos;
+let prestamoSeleccionado = null;
+let fechaCorteActual ;
 
 $(document).ready(function () {
-    // Inicializar fecha actual
-    $('#fechaActual').text(new Date().toLocaleDateString('es-ES'));
-    showLoadingSpinner();
-    // Inicializar DataTable
-    tabla = $('#tablaMovimientos').DataTable({
-        pageLength: 15,
-        order: [[0, 'desc']],
-        columnDefs: [
-            { targets: [2, 3], className: 'text-center' }, // Ingresos y Egresos
-            { targets: [5], orderable: false } // Columna de acciones
-        ]
-    });
 
-    // Cargar datos iniciales
-    cargarDashboard();
+    // Inicializar fecha actual
+    const hoy = new Date();
+    const fechaLocal = new Date(hoy.getTime() - (hoy.getTimezoneOffset() * 60000));
+    const fechaFormateada = fechaLocal.toISOString().split('T')[0];
+    $('#fechaCorteSelect').val(fechaFormateada);
+
+    $('#tablaMovimientos').DataTable();
+    $('#tablaPrestamos').DataTable();
+
+
+    $('#fechaCorteSelect').on('change', function () {
+        fechaCorteActual = $(this).val();
+        cargarMovimientosDia();
+    });
+    
     cargarMovimientosDia();
 
     // Event Listeners
@@ -33,10 +34,7 @@ $(document).ready(function () {
 
     $('#btnBuscarSolicitud').on('click', buscarSolicitud);
     $('#btnConfirmarDesembolso').on('click', confirmarDesembolso);
-    $('#btnGuardarCobro').on('click', guardarCobro);
     $('#btnActualizar').on('click', cargarMovimientosDia);
-    $('#btnExportar').on('click', exportarMovimientos);
-
 
     // Enter en campo de búsqueda
     $('#numeroSolicitud').on('keypress', function (e) {
@@ -44,18 +42,6 @@ $(document).ready(function () {
             buscarSolicitud();
         }
     });
-
-    // Enter en campo DUI
-    $('#dui').on('keypress', function (e) {
-        if (e.which === 13) {
-            getClienteBuscar();
-        }
-    });
-
-    // Eventos para cálculo automático
-    $('#montoCapital, #montoInteres, #montoMora, #montoDomicilio').on('input', calcularTotal);
-
-
 
     function buscarSolicitud() {
         showLoadingSpinner();
@@ -67,7 +53,7 @@ $(document).ready(function () {
         }
 
         $.ajax({
-            url: `/Auxiliares/GetSolicitudParaDesembolso?id=${numeroSolicitud}`,
+            url: `/Crud/GetSolicitudParaDesembolso?id=${numeroSolicitud}`,
             method: 'GET',
             success: function (data) {
                 if (data && data.success) {
@@ -186,7 +172,6 @@ $(document).ready(function () {
 
                     $('#modalDesembolso').modal('hide');
                     limpiarModalDesembolso();
-                    cargarDashboard();
                     cargarMovimientosDia();
                 } else {
                     Swal.fire('Error', response.message, 'error');
@@ -206,31 +191,6 @@ $(document).ready(function () {
         $('#btnConfirmarDesembolso').hide();
     }
 
-
-
-    function exportarMovimientos() {
-        const fecha = new Date().toISOString().split('T')[0];
-
-        Swal.fire({
-            title: 'Exportando...',
-            text: 'Generando reporte de movimientos',
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            willOpen: () => {
-                Swal.showLoading();
-            }
-        });
-
-        // Simular exportación (aquí puedes implementar la lógica real)
-        setTimeout(() => {
-            Swal.fire({
-                title: '¡Exportado!',
-                text: 'El reporte ha sido generado exitosamente',
-                icon: 'success'
-            });
-        }, 2000);
-    }
-
     // Limpiar modales al cerrar
     $('#modalDesembolso').on('hidden.bs.modal', limpiarModalDesembolso);
     $('#modalCobro').on('hidden.bs.modal', function () {
@@ -239,131 +199,16 @@ $(document).ready(function () {
     });
 
     // Formato de campos monetarios
-    $('#montoCapital, #montoInteres, #montoMora').on('input', function () {
+    $('#montoCapital').on('input', function () {
         let value = $(this).val().replace(/[^0-9.]/g, '');
         if (value.split('.').length > 2) {
             value = value.substring(0, value.lastIndexOf('.'));
         }
         $(this).val(value);
-        calcularTotal();
     });
 });
-function guardarCobro() {
-    const form = $('#formCobro')[0];
-    if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-    }
-
-    const $btnGuardar = $('#btnGuardarCobro');
-    if ($btnGuardar.prop('disabled')) {
-        return;
-    }
-
-    $btnGuardar.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Procesando...');
-
-    Swal.fire({
-        title: 'Procesando...',
-        text: 'Registrando cobro',
-        allowOutsideClick: false,
-        showConfirmButton: false,
-        willOpen: () => {
-            Swal.showLoading();
-        }
-    });
-
-    const data = {
-        idPrestamo: $('#prestamoSeleccionadoId').val(),
-        numeroCuota: parseInt($('#numeroCuota').val()) || 1,
-        montoCapital: parseFloat($('#montoCapital').val()) || 0,
-        montoInteres: parseFloat($('#montoInteres').val()) || 0,
-        montoMora: parseFloat($('#montoMora').val()) || 0,
-        montoTotal: parseFloat($('#montoTotal').val()) || 0,
-        metodoPago: $('#metodoPago').val() || 'EFECTIVO',
-        observaciones: $('#observacionesCobro').val() || '',
-        concepto: $('#conceptoCobro').val(),
-        idCliente: $('#txtIdCliente').val()
-    };
 
 
-    //console.log(data);
-
-    // USAR EL NUEVO ENDPOINT
-    $.ajax({
-        url: '/Auxiliares/RegistrarPagoConCalendario',
-        method: 'POST',
-        data: data,
-        success: function (response) {
-            $btnGuardar.prop('disabled', false).html('<i class="fas fa-save me-2"></i>Registrar Cobro');
-
-            if (response.success) {
-                const datosCobro = {
-                    idCobro: response.data?.idCobro || new Date().getTime(),
-                    numeroCuota: data.numeroCuota,
-                    montoTotal: data.montoTotal,
-                    cliente: {
-                        nombre: $('#clienteNombre').text().split(' ')[0] || 'Cliente',
-                        apellido: $('#clienteNombre').text().split(' ').slice(1).join(' ') || '',
-                        dui: $('#clienteDui').text()
-                    },
-                    montoCapital: data.montoCapital || 0,
-                    montoInteres: data.montoInteres || 0,
-                    montoMora: data.montoMora || 0,
-                    metodoPago: data.metodoPago,
-                    observaciones: data.observaciones || '',
-                    concepto: data.concepto || 'CUOTA_COMPLETA',
-                    idPrestamo: data.idPrestamo,
-                    idCliente: data.idCliente
-                };
-
-                const estadoPrestamo = response.data?.estadoPrestamo === 'C';
-
-                Swal.fire({
-                    title: '¡Cobro Registrado!',
-                    html: `
-                        <div class="text-center">
-                            <div class="alert alert-success mb-3">
-                                <i class="fas fa-check-circle fa-2x text-success mb-2"></i><br>
-                                <strong>Pago registrado exitosamente</strong>
-                            </div>
-                            <p><strong>Recibo:</strong> #${datosCobro.idCobro}</p>
-                            <p><strong>Cuota:</strong> #${datosCobro.numeroCuota}</p>
-                            <p><strong>Monto:</strong> $${data.montoTotal.toFixed(2)}</p>
-                            <p><strong>Cliente:</strong> ${datosCobro.cliente.nombre} ${datosCobro.cliente.apellido}</p>
-                            ${estadoPrestamo ?
-                            '<div class="alert alert-info mt-2"><i class="fas fa-trophy me-1"></i>¡Préstamo completamente liquidado!</div>' :
-                            ''}
-                        </div>
-                    `,
-                    icon: 'success',
-                    showCancelButton: true,
-                    confirmButtonText: '<i class="fas fa-receipt me-1"></i>Generar Recibo PDF',
-                    cancelButtonText: '<i class="fas fa-check me-1"></i>Solo Continuar',
-                    confirmButtonColor: '#198754',
-                    cancelButtonColor: '#28a745'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        //console.log(datosCobro);
-                        generarTicketCobroPDF(datosCobro);                       
-                    }
-                });
-
-                $('#modalCobro').modal('hide');
-                $('#formCobro')[0].reset();
-                nuevaBusqueda();
-                cargarDashboard();
-                cargarMovimientosDia();
-            } else {
-                Swal.fire('Error', response.message || 'Error al registrar el cobro', 'error');
-            }
-        },
-        error: function (xhr, status, error) {
-            $btnGuardar.prop('disabled', false).html('<i class="fas fa-save me-2"></i>Registrar Cobro');
-            console.error('Error AJAX:', error);
-            Swal.fire('Error', 'Error al conectar con el servidor', 'error');
-        }
-    });
-}
 
 function mostrarError(mensaje) {
     $('#textoError').text(mensaje);
@@ -374,7 +219,6 @@ function mostrarError(mensaje) {
     $('#seccionCliente').hide();
     $('#seccionFormularioCobro').hide();
     $('#registroCobro').hide();
-    $('#btnGuardarCobro').hide();
     $('#btnNuevaBusqueda').hide();
 }
 
@@ -382,11 +226,9 @@ function limpiarDatosCliente() {
     $('#seccionCliente').hide();
     $('#seccionFormularioCobro').hide();
     $('#registroCobro').hide();
-    $('#btnGuardarCobro').hide();
     $('#btnNuevaBusqueda').hide();
     $('#dui').val('');
     $('#listaPrestamos').empty();
-    $('#cantidadPrestamos').text('0');
 }
 
 function mostrarDatosCliente(cliente) {
@@ -404,122 +246,6 @@ function mostrarDatosCliente(cliente) {
     $('#btnNuevaBusqueda').show();
 }
 
-function mostrarListaPrestamos(prestamos) {
-    const contenedor = $('#listaPrestamos');
-    contenedor.empty();
-
-    // Filtrar solo préstamos activos
-    const prestamosActivos = prestamos.filter(prestamo => prestamo.estado === "A");
-
-    $('#cantidadPrestamos').text(prestamosActivos.length);
-
-    if (prestamosActivos.length === 0) {
-        contenedor.append(`
-            <div class="alert alert-warning text-center">
-                <i class="fas fa-info-circle me-2"></i>
-                Este cliente no tiene préstamos activos para cobrar
-            </div>
-        `);
-        return;
-    }
-
-    prestamosActivos.forEach(function (prestamo, index) {
-
-        console.log(prestamo);
-
-        const tieneMora = 0.00;
-        const estadoMora = tieneMora ?
-            `<span class="badge bg-danger">Mora: 0.00 días</span>` :
-            `<span class="badge bg-success">Al día</span>`;
-  
-        const cardPrestamo = `
-            <div class="card mb-2 prestamo-card" data-prestamo='${JSON.stringify(prestamo)}' 
-                 onclick="seleccionarPrestamo(${index})" style="cursor: pointer;">
-                <div class="card-body p-3">
-                    <div class="row align-items-center">
-                        <div class="col-lg-2 col-6">
-                            <strong class="text-primary">Préstamo #${prestamo.id}</strong>
-                        </div>
-                        <div class="col-lg-2 col-6">
-                            <small class="text-muted">Monto Original</small><br>
-                            <strong>$${prestamo.monto.toFixed(2)}</strong>
-                        </div>
-                        <div class="col-lg-2 col-6">
-                            <small class="text-muted">Cuota</small><br>
-                            <strong class="text-success">$${prestamo.cuotas.toFixed(2)}</strong>
-                        </div>
-                        <div class="col-lg-2 col-6">
-                            <small class="text-muted">Progreso</small><br>
-                           <strong>${prestamo.numCuotas}/${prestamo.cuotasPagadas}</strong>
-                        </div>
-                        <div class="col-lg-2 col-6">
-                            <small class="text-muted">Saldo</small><br>
-                             <strong class="text-warning">$${prestamo.saldoPendiente.toFixed(2)}</strong>
-                        </div>
-                        <div class="col-lg-2 col-6 text-center">
-                            ${estadoMora}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        contenedor.append(cardPrestamo);
-    });
-
-    // Agregar estilos hover
-    $('.prestamo-card').hover(
-        function () { $(this).addClass('border-primary'); },
-        function () { $(this).removeClass('border-primary'); }
-    );
-}
-
-
-// ===== FUNCIÓN PARA CALCULAR FECHA DE VENCIMIENTO =====
-function calcularFechaVencimiento(prestamo) {
-    if (!prestamo.proximoPago) return 'Sin fecha';
-
-    const fechaProximoPago = new Date(prestamo.proximoPago);
-    const hoy = new Date();
-
-    if (fechaProximoPago < hoy) {
-        const diasVencido = Math.floor((hoy - fechaProximoPago) / (1000 * 60 * 60 * 24));
-        return `Vencido (${diasVencido} días)`;
-    } else {
-        return fechaProximoPago.toLocaleDateString('es-ES');
-    }
-}
-
-// ===== FUNCIÓN PARA CALCULAR DÍAS VENCIDOS =====
-function calcularDiasVencido(fechaProximoPago) {
-    if (!fechaProximoPago) return 0;
-
-    const fechaPago = new Date(fechaProximoPago);
-    const hoy = new Date();
-
-    if (fechaPago < hoy) {
-        return Math.floor((hoy - fechaPago) / (1000 * 60 * 60 * 24));
-    }
-
-    return 0; // No está vencido
-}
-
-function toggleCronograma() {
-    const cronogramaBody = $('#cronogramaBody');
-    const isVisible = cronogramaBody.is(':visible');
-
-    if (isVisible) {
-        cronogramaBody.slideUp();
-    } else {
-        cronogramaBody.slideDown();
-        // Recargar cronograma si está oculto
-        const idPrestamo = $('#prestamoSeleccionadoId').val();
-        if (idPrestamo) {
-            mostrarPagosReal(idPrestamo);
-        }
-    }
-}
-
 function nuevaBusqueda() {
     $('#seccionBusqueda').show();
     $('#seccionCliente').hide();
@@ -527,7 +253,6 @@ function nuevaBusqueda() {
     $('#registroCobro').hide();
     $('#seccionCronograma').hide(); 
     $('#mensajeError').hide();
-    $('#btnGuardarCobro').hide();
     $('#btnNuevaBusqueda').hide();
     $('#dui').val('').focus();
     $('#formCobro')[0].reset();
@@ -536,67 +261,44 @@ function nuevaBusqueda() {
 }
 
 
-
-
 // Función mejorada para buscar cliente
-function getClienteBuscar() {
+function busquedaCliente() {
     var dui = $('#dui').val().trim();
     var nombreApellido = $('#nombreApellido').val().trim();
-
     // Limpiar primero
     $('#rowSeleccionCliente').hide();
     $('#seccionCliente').hide();
 
-    if (dui) {
-        // Búsqueda directa por DUI
-        getCliente(dui);
-    } else if (nombreApellido) {
-        // Búsqueda por nombre (muestra listado)
-        getClienteNombre(nombreApellido);
-    } else {
-        mostrarError('Por favor ingrese un DUI o un nombre para buscar');
+    if (!dui && !nombreApellido) {
+        Swal.fire("Error", "Ingrese un DUI o Nombre/Apellido para buscar", "error");
+        return;
     }
-}
 
-
-function getCliente(dui){
-    showLoadingSpinner();
-    $.ajax({
-        url: `/Auxiliares/GetClienteDetalle?dui=${dui}`,
-        method: 'GET',
-        success: function (resp) {
-
-            if (!resp || typeof resp !== "object" || Object.keys(resp).length === 0) {
-                mostrarError("No se encontró un cliente registrado con ese DUI");
-                limpiarDatosCliente();
-                return;
-            }
-            mostrarDatosCliente(resp);
-            buscarPrestamosActivos(resp.id);
-        },
-        error: function (xhr, status, error) {
-            console.error('Error al buscar cliente:', error);
-            hideLoadingSpinner();
-            mostrarError('Error al buscar el cliente. Intente nuevamente.');
-        }
-    });
-}
-
-function getClienteNombre(nombreApellido) {
     showLoadingSpinner();
     limpiarDatosCliente();
+
     $.ajax({
-        url: `/Auxiliares/GetClienteDetalleNombre?nombreApellido=${nombreApellido}`,
+        url: `/Auxiliares/BuscarCliente?dui=${encodeURIComponent(dui)}&nombreApellido=${encodeURIComponent(nombreApellido)}`,
         method: 'GET',
         success: function (resp) {
 
-            if (!resp || typeof resp !== "object" || Object.keys(resp).length === 0) {
-                Swal.fire("Error", "No se encuentra nigun cliente.", "error");
+            if (!resp || (Array.isArray(resp) && resp.length === 0)) {
+                limpiarDatosCliente();
                 hideLoadingSpinner();
+                Swal.fire("Error", "No se encuentra cliente registrado.", "error");
                 return;
             }
-            clienteActual = resp;
-            mostrarCardSeleccionClientes(resp);
+
+            // ✅ Si viene objeto único (DUI exacto)
+            if (!Array.isArray(resp)) {
+                mostrarDatosCliente(resp);
+                buscarPrestamosActivos(resp.id);
+            }
+            // ✅ Si viene lista (por nombre o apellido)
+            else {
+                clienteActual = resp;
+                mostrarCardSeleccionClientes(resp);
+            }
         },
         error: function (xhr, status, error) {
             hideLoadingSpinner();
@@ -604,6 +306,8 @@ function getClienteNombre(nombreApellido) {
         }
     });
 }
+
+
 
 
 // Función optimizada para móvil - reemplazar la función existente
@@ -660,52 +364,96 @@ function seleccionarClienteDetalle(idCliente) {
     buscarPrestamosActivos(cliente.id);
 }
 
-
 function cargarMovimientosDia() {
-    const fecha = obtenerFechaSalvador();
-   
+    const fecha = $('#fechaCorteSelect').val();
+
+    showLoadingSpinner();
+
     $.ajax({
-        url: `/Auxiliares/GetMovimientosDiariosCompleto?fecha=${fecha}`,
+        url: `/Crud/GetMovimientosDiariosCompleto?fecha=${fecha}`,
         method: 'GET',
         success: function (response) {
-            tabla.clear();
             let totalIngresos = 0;
             let totalEgresos = 0;
+            let totalMovimientos = 0;
 
             if (response.success && response.data && Array.isArray(response.data)) {
-                response.data.forEach(function (mov) {
-                    const esIngreso = mov.tipo === 'INGRESO';
-                    const monto = parseFloat(mov.monto);
+                let datosTabla = response.data;
+                let resumen = response.resumen;
 
-                    if (esIngreso) {
-                        totalIngresos += monto;
-                    } else {
-                        totalEgresos += monto;
-                    }
+                totalIngresos = resumen.ingresosDia;
+                totalEgresos = resumen.egresosDia;
+                totalMovimientos = resumen.totalMovimientos;
 
-                    const fila = tabla.row.add([
-                        mov.concepto,
-                        mov.cliente,
-                        esIngreso ? `<span class="monto-ingreso">$${monto.toFixed(2)}</span>` : '-',
-                        !esIngreso ? `<span class="monto-egreso">$${monto.toFixed(2)}</span>` : '-',
-                        mov.usuario,
-                        `<button class="btn btn-sm btn-outline-primary" onclick="verDetalle(${mov.id})">
+                if ($.fn.DataTable.isDataTable('#tablaMovimientos')) {
+                    $('#tablaMovimientos').DataTable().destroy();
+                }
+
+                tabla = $('#tablaMovimientos').DataTable({
+                    data: datosTabla,
+                    scrollCollapse: true,
+                    scrollX: true,
+                    layout: {
+                        topStart: {
+                            buttons: [
+                                {
+                                    extend: 'excelHtml5',
+                                    autoFilter: true,
+                                    sheetName: 'Exported data'
+                                }
+                            ]
+                        }
+                    },
+                    fixedColumns: {
+                        leftColumns: 1
+                    },
+                    columns: [
+                        {
+                            data: "concepto",
+                            render: d => `<div><small>${d || 'N/A'}</small></div>`
+                        },
+                        {
+                            data: "cliente",
+                            render: (d, t, row) => `<div><small>${d || 'N/A'}</small></div>`
+                        },
+                        {
+                            data: "monto",
+                            render: (d, t, row) => `<div class="text-center monto-ingreso">${(row.tipo == 'INGRESO' ? parseFloat(d || 0) : 0).toFixed(2)}</div>`
+                        },
+                        {
+                            data: "monto",
+                            render: (d, t, row) => `<div class="text-center monto-egreso">${(row.tipo != 'INGRESO' ? parseFloat(d || 0) : 0).toFixed(2)}</div>`
+                        },
+                        {
+                            data: "usuario",
+                            render: d => `<div class="text-center">${d || 'Indefinido'}</div>`
+                        },
+                        {
+                            data: null,
+                            render: (d, t, row) => `<button class="btn btn-sm btn-outline-primary" onclick="verDetalle(${row.id})">
                                 <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="revertirPago(${row.id}, '${row.concepto}', ${row.monto})">
+                                <i class="fas fa-undo"></i>
                             </button>`
-                    ]).node();
-
-                    if (esIngreso) {
-                        $(fila).addClass('ingreso-row');
-                    } else {
-                        $(fila).addClass('egreso-row');
-                    }
+                        }
+                    ],
+                    order: [[0, 'desc']],
+                    columnDefs: [
+                        { targets: [2, 3], className: 'text-center' }, // Ingresos y Egresos
+                        { targets: [5], orderable: false } // Columna de acciones
+                    ]
                 });
             }
 
-            tabla.draw();
             $('#totalIngresos').text('$' + totalIngresos.toFixed(2));
             $('#totalEgresos').text('$' + totalEgresos.toFixed(2));
-            $('#contadorMovimientos').text(response.data ? response.data.length : 0);
+            $('#contadorMovimientos').text(totalMovimientos);
+
+            $('#ingresosDia').text('$' + totalIngresos.toFixed(2));
+            $('#egresosDia').text('$' + totalEgresos.toFixed(2));
+            $('#totalMovimientos').text(totalMovimientos || 0);
+
             hideLoadingSpinner();
         },
         error: function () {
@@ -715,8 +463,704 @@ function cargarMovimientosDia() {
     });
 }
 
+function revertirPago(idMovimiento, concepto, monto) {
+    Swal.fire({
+        title: '¿Revertir este pago?',
+        html: `
+            <div class="text-start">
+                <p><strong>Movimiento:</strong> ${concepto}</p>
+                <p><strong>Monto:</strong> $${monto.toFixed(2)}</p>
+                <p class="text-danger"><i class="fas fa-exclamation-triangle"></i> Esta acción no se puede deshacer</p>
+            </div>
+        `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, revertir',
+        cancelButtonText: 'Cancelar',
+        input: 'text',
+        inputPlaceholder: 'Motivo de la reversión (obligatorio)',
+        inputValidator: (value) => {
+            if (!value || value.trim() === '') {
+                return 'Debe ingresar un motivo para la reversión';
+            }
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const motivo = result.value;
 
-// Agregar AL FINAL del archivo movimientos.js (antes del último });)
+            // Mostrar spinner de carga
+            showLoadingSpinner();
+
+            // Llamar al endpoint de reversión
+            $.ajax({
+                url: '/Crud/RevertirPago',
+                method: 'POST',
+                data: {
+                    idMovimiento: idMovimiento,
+                    motivo: motivo
+                },
+                success: function (response) {
+                    hideLoadingSpinner();
+
+                    if (response.success) {
+                        Swal.fire({
+                            title: '¡Reversión exitosa!',
+                            text: response.message,
+                            icon: 'success'
+                        }).then(() => {
+                            cargarMovimientosDia();
+                        });
+                    } else {
+                        Swal.fire({
+                            title: 'Error',
+                            text: response.message || 'No se pudo revertir el pago',
+                            icon: 'error'
+                        });
+                    }
+                },
+                error: function () {
+                    hideLoadingSpinner();
+                    Swal.fire({
+                        title: 'Error',
+                        text: 'Ocurrió un error al comunicarse con el servidor',
+                        icon: 'error'
+                    });
+                }
+            });
+        }
+    });
+}
+
+function mostrarOpcionesPDF(docDefinition, titulo, nombreArchivo) {
+    Swal.fire({
+        title: titulo,
+        text: '¿Qué desea hacer con el documento?',
+        icon: 'question',
+        showCancelButton: true,
+        showDenyButton: true,
+        confirmButtonText: '<i class="fas fa-download me-1"></i>Descargar PDF',
+        denyButtonText: '<i class="fas fa-eye me-1"></i>Ver Vista Previa',
+        cancelButtonText: '<i class="fas fa-times me-1"></i>Cerrar',
+        confirmButtonColor: '#198754',
+        denyButtonColor: '#0d6efd',
+        cancelButtonColor: '#6c757d'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            pdfMake.createPdf(docDefinition).download(`${nombreArchivo}.pdf`);
+            showAlert('success', 'PDF descargado exitosamente');
+        } else if (result.isDenied) {
+            pdfMake.createPdf(docDefinition).open();
+        }
+    });
+}
+
+function obtenerDatosUsuarioLogueado() {
+    return {
+        nombre: 'Sistema',
+        apellido: 'Administrativo'
+    };
+}
+
+function verDetalle(idMovimiento) {
+    // Mostrar loading
+    Swal.fire({
+        title: 'Cargando...',
+        text: 'Obteniendo detalles del movimiento',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        willOpen: () => {
+            Swal.showLoading();
+        }
+    });
+
+    // ✅ Usar tu método existente con el parámetro adicional
+    $.ajax({
+        url: `/Crud/GetMovimientosDetallado?idMovimiento=${idMovimiento}`,
+        method: 'GET',
+        success: function (response) {
+            if (response.success && response.data) {
+                let movimiento = response.data;
+                const monto = parseFloat(movimiento.monto) || 0;
+                const esIngreso = movimiento.tipo === "INGRESO";
+                const esEgreso = movimiento.tipo === "EGRESO";
+
+                // Determinar clase de badge e ícono
+                const badgeClass = esIngreso ? 'bg-success' : 'bg-danger';
+                const iconClass = esIngreso ? 'fas fa-arrow-down' : 'fas fa-arrow-up';
+
+                // Crear el contenido del modal con DATOS REALES
+                const modalContent = `
+        <div class="text-start">
+            <!-- Encabezado del movimiento -->
+            <div class="alert alert-info mb-4">
+                <div class="row align-items-center">
+                    <div class="col-2 text-center">
+                        <i class="${iconClass} fa-2x"></i>
+                    </div>
+                    <div class="col-10">
+                        <h5 class="mb-1">
+                            <span class="badge ${badgeClass} fs-6 me-2">${movimiento.tipo}</span>
+                            Movimiento #${movimiento.id}
+                        </h5>
+                        <p class="mb-0 text-muted">
+                            <i class="fas fa-calendar me-1"></i>${movimiento.fechaPago || 'N/A'} - 
+                            <i class="fas fa-clock me-1"></i>${movimiento.hora}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Información principal -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Información General</h6>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-borderless mb-0">
+                                <tr>
+                                    <td><strong>Concepto:</strong></td>
+                                    <td>${movimiento.concepto || 'No especificado'}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Método de Pago:</strong></td>
+                                    <td>${movimiento.tipoPago || 'EFECTIVO'}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Usuario Responsable:</strong></td>
+                                    <td>${movimiento.usuario || 'Sistema'}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Número de Cuota:</strong></td>
+                                    <td>${movimiento.numeropago && movimiento.numeropago > 0 ? `Cuota #${movimiento.numeropago}` : 'N/A'}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Préstamo:</strong></td>
+                                    <td>#${movimiento.idPrestamo || 'N/A'}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Estado:</strong></td>
+                                    <td>${movimiento.pagado == 1 ?
+                        '<span class="badge bg-success">Procesado</span>' :
+                        '<span class="badge bg-warning">Pendiente</span>'}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card border-success">
+                        <div class="card-header bg-success text-white">
+                            <h6 class="mb-0"><i class="fas fa-dollar-sign me-2"></i>Información Financiera</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center mb-3">
+                                <h3 class="text-success mb-0">$${monto.toFixed(2)}</h3>
+                                <small class="text-muted">Monto Total</small>
+                            </div>
+                            
+                            <!-- ✅ DESGLOSE REAL CON DATOS DEL SERVIDOR -->
+                            ${(movimiento.capital || movimiento.interes || movimiento.mora) ? `
+                                <hr>
+                                <h6 class="mb-2">Desglose Financiero:</h6>
+                                <table class="table table-sm">
+                                    ${movimiento.capital && movimiento.capital > 0 ? `
+                                        <tr>
+                                            <td><i class="fas fa-university me-1"></i>Capital:</td>
+                                            <td class="text-end fw-bold text-primary">$${parseFloat(movimiento.capital).toFixed(2)}</td>
+                                        </tr>
+                                    ` : ''}
+                                    ${movimiento.interes && movimiento.interes > 0 ? `
+                                        <tr>
+                                            <td><i class="fas fa-percentage me-1"></i>Interés:</td>
+                                            <td class="text-end fw-bold text-info">$${parseFloat(movimiento.interes).toFixed(2)}</td>
+                                        </tr>
+                                    ` : ''}
+                                    ${movimiento.mora && movimiento.mora > 0 ? `
+                                        <tr>
+                                            <td><i class="fas fa-exclamation-triangle me-1"></i>Mora:</td>
+                                            <td class="text-end fw-bold text-warning">$${parseFloat(movimiento.mora).toFixed(2)}</td>
+                                        </tr>
+                                    ` : ''}
+                                    ${movimiento.morahist && movimiento.morahist > 0 ? `
+                                        <tr>
+                                            <td><i class="fas fa-history me-1"></i>Mora Histórica:</td>
+                                            <td class="text-end fw-bold text-secondary">$${parseFloat(movimiento.morahist).toFixed(2)}</td>
+                                        </tr>
+                                    ` : ''}
+                                </table>
+                            ` : `
+                                <div class="alert alert-light text-center">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    <small>Movimiento sin desglose detallado</small>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Información del cliente -->
+            <div class="card border-info mb-4">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="fas fa-user me-2"></i>Información del Cliente</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="mb-1"><strong><i class="fas fa-user me-1"></i>Nombre:</strong> ${movimiento.cliente || 'No especificado'}</p>
+                            ${movimiento.duiCliente ? `<p class="mb-1"><strong><i class="fas fa-id-card me-1"></i>DUI:</strong> ${movimiento.duiCliente}</p>` : ''}
+                            ${movimiento.telefonoCliente ? `<p class="mb-0"><strong><i class="fas fa-phone me-1"></i>Teléfono:</strong> ${movimiento.telefonoCliente}</p>` : ''}
+                        </div>
+                        <div class="col-md-6">
+                            ${movimiento.montoPrestamo ? `<p class="mb-1"><strong><i class="fas fa-money-bill me-1"></i>Monto Préstamo:</strong> $${parseFloat(movimiento.montoPrestamo).toFixed(2)}</p>` : ''}
+                            ${movimiento.tipoPrestamo ? `<p class="mb-1"><strong><i class="fas fa-calendar me-1"></i>Tipo:</strong> ${movimiento.tipoPrestamo}</p>` : ''}
+                            ${movimiento.estadoPrestamo ? `<p class="mb-0"><strong><i class="fas fa-flag me-1"></i>Estado:</strong> 
+                                <span class="badge ${movimiento.estadoPrestamo === 'A' ? 'bg-success' :
+                            movimiento.estadoPrestamo === 'C' ? 'bg-primary' : 'bg-secondary'}">
+                                    ${movimiento.estadoPrestamo === 'A' ? 'Activo' :
+                            movimiento.estadoPrestamo === 'C' ? 'Cancelado' : 'Otro'}
+                                </span></p>` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Observaciones automáticas -->
+            <div class="card border-warning">
+                <div class="card-header bg-warning">
+                    <h6 class="mb-0"><i class="fas fa-comment me-2"></i>Observaciones del Sistema</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        ${movimiento.pagado == 1 ?
+                        '<li><i class="fas fa-check-circle text-success me-2"></i>Transacción procesada exitosamente</li>' :
+                        '<li><i class="fas fa-clock text-warning me-2"></i>Transacción pendiente de procesamiento</li>'}
+                        
+                        ${movimiento.tipo === "EGRESO" ?
+                        '<li><i class="fas fa-money-bill-wave text-primary me-2"></i>Dinero entregado al cliente (desembolso)</li>' :
+                        '<li><i class="fas fa-hand-holding-usd text-success me-2"></i>Dinero recibido del cliente (pago)</li>'}
+                        
+                        ${movimiento.mora && movimiento.mora > 0 ?
+                        `<li><i class="fas fa-exclamation-triangle text-warning me-2"></i>Incluye recargo por mora: $${parseFloat(movimiento.mora).toFixed(2)}</li>` : ''}
+                        
+                        ${movimiento.estadoPrestamo === 'C' ?
+                        '<li><i class="fas fa-trophy text-success me-2"></i>¡Este movimiento completó la liquidación del préstamo!</li>' : ''}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    `;
+
+                // Mostrar el modal
+                Swal.fire({
+                    title: `<i class="${iconClass} me-2"></i>Detalle Completo del Movimiento`,
+                    html: modalContent,
+                    width: '900px',
+                    showCancelButton: true,
+                    showConfirmButton: true,
+                    confirmButtonText: '<i class="fas fa-receipt me-1"></i>Generar Comprobante',
+                    cancelButtonText: '<i class="fas fa-times me-1"></i>Cerrar',
+                    confirmButtonColor: '#198754',
+                    cancelButtonColor: '#6c757d',
+                    customClass: {
+                        container: 'swal-wide'
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // Generar comprobante con datos completos
+                        generarComprobanteCompleto(movimiento);
+                    }
+                });
+
+            } else {
+                Swal.fire({
+                    title: 'Error',
+                    text: response.message || 'No se pudo obtener el detalle del movimiento',
+                    icon: 'error',
+                    confirmButtonColor: '#dc3545'
+                });
+            }
+        },
+        error: function (xhr, status, error) {
+            console.error('Error al obtener detalle:', error);
+            Swal.fire({
+                title: 'Error de Conexión',
+                text: 'No se pudo conectar con el servidor para obtener los detalles',
+                icon: 'error',
+                confirmButtonColor: '#dc3545'
+            });
+        }
+    });
+}
+
+
+// NUEVA FUNCIÓN para obtener préstamos con calendario
+function buscarPrestamosActivos(idCliente) {
+    $.ajax({
+        url: `/Crud/buscarPrestamosActivos?idCliente=${idCliente}`,
+        method: 'GET',
+        success: function (data) {
+            if (data && data.success && Array.isArray(data.data)) {
+                if (data.data.length === 0) {
+                    mostrarError("No se encontraron préstamos activos para este cliente");
+                    return;
+                }
+                mostrasListaPrestamos(data.data);
+            } else {
+                hideLoadingSpinner();
+                mostrarError("No se encontraron préstamos activos para este cliente");
+
+            }
+        },
+        error: function (xhr, status, error) {
+            hideLoadingSpinner();
+            console.error('Error al buscar préstamos:', error);
+            mostrarError('Error al buscar los préstamos. Intente nuevamente.');
+        }
+    });
+}
+
+
+// NUEVA FUNCIÓN para mostrar préstamos con información del calendario
+function mostrasListaPrestamos(prestamos) {
+   
+    if ($.fn.DataTable.isDataTable('#tablaPrestamos')) {
+        $('#tablaPrestamos').DataTable().destroy();
+    }
+
+    // Inicializar DataTable
+    listaPrtamos = new DataTable('#tablaPrestamos', {
+        data: prestamos,
+        columns: [
+            {
+                data: "id",
+                render: (d, t, row) => `<strong>#${row.id}</strong><br><small>${row.tipoPrestamo}</small>`
+            },
+            {
+                data: "monto",
+                render: d => `<div class="text-center">${(d || 0).toFixed(2)}</div>`
+            },
+            {
+                data: "montoCuota",
+                render: d => `<div class="text-center">${(d || 0).toFixed(2)}</div>`
+            },
+            {
+                data: "abonosRealizados",
+                render: d => `<div class="text-center">${d || 0}</div>`
+            },
+            {
+                data: "cuotasPagadas",
+                render: d => `<div class="text-center">${(d || 0).toFixed(2)}</div>`
+            },
+            {
+                data: "saldoPagado",
+                render: d => `<div class="text-center">${(d || 0).toFixed(2)}</div>`
+            },
+            {
+                data: "saldoPendiente",
+                render: d => `<div class="text-center">${(d || 0).toFixed(2)}</div>`
+            },
+            {
+                data: "diasMora",
+                render: d => `<div class="text-center">${(d || 0)}</div>`
+            },
+            {
+                data: "cuotasEnMora",
+                render: d => `<div class="text-center">${(d || 0)}</div>`
+            },
+            {
+                data: "saldoEnMora",
+                render: d => `<div class="text-center">${(d || 0)}</div>`
+            },
+            {
+                data: "proximoPagoSegunPrestamo",
+                render: d => `<div class="text-center"><small>${d || 'N/A'}</small></div>`
+            }
+        ],
+        scrollCollapse: true,
+        scrollY: "300px",
+        scrollX: true,
+        paging: false,
+        searching: false,
+        info: false,
+        select: {
+            style: 'single'
+        },
+        fixedColumns: {
+            leftColumns:1
+        },
+        order: [[0, 'desc']],
+        rowCallback: function (row, data, index) {
+            if (data.tieneMora === true || data.diasMora > 0) {
+                if (data.diasMora > 30) {
+                    // Mora severa
+                    $(row).css({
+                        'background-color': '#ffcdd2',
+                        'color': '#b71c1c'
+                    });
+                } else if (data.diasMora > 15) {
+                    // Mora moderada
+                    $(row).css({
+                        'background-color': '#ffebee',
+                        'color': '#d32f2f'
+                    });
+                } else if (data.diasMora > 0) {
+                    // Mora leve
+                    $(row).css({
+                        'background-color': '#fff3e0',
+                        'color': '#e65100'
+                    });
+                }
+            }
+        }
+    });
+
+    listaPrtamos.on('select', function (e, dt, type, indexes) {
+        let rowData = listaPrtamos.row(indexes[0]).data();
+        console.log("Objeto completo:", rowData);
+
+        prestamoSeleccionado = rowData;
+
+        $('#seccionFormularioCobro').show();
+        $("#prestamoIdSeleccionado").html(rowData.id);
+        $("#prestamoCuotaMensual").html(rowData.montoCuota);
+        $("#prestamoTipo").html(rowData.tipoPrestamo);
+
+    });
+    hideLoadingSpinner();
+}
+
+
+function procederCobro() {
+    const form = $('#formCobro')[0];
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    };
+
+    const $btnGuardar = $('#btnGuardarCobro');
+    if ($btnGuardar.prop('disabled')) {
+        return;
+    }
+
+    $btnGuardar.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Procesando...');
+
+
+    Swal.fire({
+        title: 'Confirmar Cobro',
+        html: mostrarResumenCobro(),
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-check me-1"></i>Confirmar Cobro',
+        cancelButtonText: '<i class="fas fa-times me-1"></i>Cancelar',
+        confirmButtonColor: '#198754',
+        cancelButtonColor: '#6c757d',
+        width: '500px'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            generarCobro(); 
+        } else {
+            $btnGuardar.prop('disabled', false).html('<i class="fas fa-save me-2"></i>Registrar Cobro');
+        }
+    });
+}
+
+
+function mostrarResumenCobro() {
+
+    if (!prestamoSeleccionado) {
+        Swal.fire('Error', 'No hay préstamo seleccionado', 'error');
+        return;
+    }
+
+    const montoTotal = parseFloat($('#montoCapital').val()) || 0;
+    const metodoPago = $('#metodoPago').val() || 'EFECTIVO';
+
+    const resumenHTML = `
+        <div class="text-start">
+            <div class="alert alert-info">
+                <h6><i class="fas fa-info-circle me-2"></i>Resumen del Cobro</h6>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-6"><strong>Préstamo:</strong></div>
+                <div class="col-6">#${prestamoSeleccionado.id} (${prestamoSeleccionado.tipoPrestamo})</div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-6"><strong>Monto Original:</strong></div>
+                <div class="col-6">$${prestamoSeleccionado.monto.toFixed(2)}</div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-6"><strong>Saldo Pendiente:</strong></div>
+                <div class="col-6 text-warning">$${prestamoSeleccionado.saldoPendiente.toFixed(2)}</div>
+            </div>
+            
+            ${prestamoSeleccionado.tieneMora ? `
+                <div class="row mb-3">
+                    <div class="col-6"><strong>Cuotas en Mora:</strong></div>
+                    <div class="col-6 text-danger">${prestamoSeleccionado.cuotasEnMora} (${prestamoSeleccionado.diasMora} días)</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6"><strong>Saldo en Mora:</strong></div>
+                    <div class="col-6 text-danger">$${prestamoSeleccionado.saldoEnMora.toFixed(2)}</div>
+                </div>
+            ` : ''}
+            
+            <hr>
+            <h6>Desglose del Pago:</h6>
+            <div class="row mb-3 border-top pt-2">
+                <div class="col-6"><strong>TOTAL A COBRAR:</strong></div>
+                <div class="col-6 fw-bold text-success fs-5">$${montoTotal.toFixed(2)}</div>
+            </div>
+            
+            <div class="row mb-2">
+                <div class="col-6">Método de Pago:</div>
+                <div class="col-6">${metodoPago}</div>
+            </div>
+        </div>
+    `;
+
+    return resumenHTML;
+}
+
+function generarCobro() {
+    Swal.fire({
+        title: 'Procesando...',
+        text: 'Registrando cobro',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        willOpen: () => {
+            Swal.showLoading();
+        }
+    });
+
+    const $btnGuardar = $('#btnGuardarCobro');
+
+    const montoAbonar = parseFloat($('#montoCapital').val()) || 0;
+    const metodoPago = $('#metodoPago').val() || 'EFECTIVO';
+    const observaciones = $('#observacionesCobro').val() || '';
+
+    const data = {
+        idPrestamo: prestamoSeleccionado.id,
+        abonosRealizados: prestamoSeleccionado.abonosRealizados,
+        montoAbonar: montoAbonar,
+        metodoPago: metodoPago || 'EFECTIVO',
+        observaciones: observaciones,
+        diasMora: prestamoSeleccionado.diasMora || 0,
+        cuotasEnMora: prestamoSeleccionado.cuotasEnMora || 0,
+        interesPendiente: prestamoSeleccionado.interesPendiente || 0,
+        fechaEstimadaPago: prestamoSeleccionado.proximoPagoSegunPrestamo || '',
+        saldoAlDia: prestamoSeleccionado.saldoEnMora || 0,
+        montoCuota: prestamoSeleccionado.montoCuota || 0,
+        capitalPendiente: prestamoSeleccionado.capitalPendiente || 0,
+        domicilioPendiente: prestamoSeleccionado.domicilioPendiente || 0,
+        tieneMora: prestamoSeleccionado.tieneMora || false,
+        interesXcuota: prestamoSeleccionado.interesXcuota || 0,
+        domicilioXcuota: prestamoSeleccionado.domicilioXcuota || 0,
+        capitalXcuota: prestamoSeleccionado.capitalXcuota || 0,
+    };
+
+    console.log(data);
+
+
+    $.ajax({
+        url: '/Crud/RegistrarPago',
+        method: 'POST',
+        data: data,
+        success: function (response) {
+            $btnGuardar.prop('disabled', false).html('<i class="fas fa-save me-2"></i>Registrar Cobro');
+
+            if (response.success) {
+                // Usar los datos REALES de distribución que devuelve el servidor
+                const distribucionReal = response.data.distribucion;
+
+                const datosCobro = {
+                    idCobro: response.data?.idMovimiento || new Date().getTime(),
+                    numeroCuota: data.numeroCuota,
+                    montoTotal: distribucionReal.total,
+                    cliente: {
+                        nombre: $('#clienteNombre').text().split(' ')[0] || 'Cliente',
+                        apellido: $('#clienteNombre').text().split(' ').slice(1).join(' ') || '',
+                        dui: $('#clienteDui').text()
+                    },
+                    // USAR LA DISTRIBUCIÓN REAL DEL SERVIDOR
+                    montoCapital: distribucionReal.capital,
+                    montoInteres: distribucionReal.interes,
+                    montoDomicilio: distribucionReal.domicilio,
+                    montoMora: 0, 
+                    metodoPago: data.metodoPago,
+                    observaciones: data.observaciones || '',
+                    concepto: data.concepto || 'CUOTA_COMPLETA',
+                    idPrestamo: data.idPrestamo,
+                    idCliente: data.idCliente
+                };
+
+                const estadoPrestamo = response.data?.estadoPrestamo === 'C';
+
+                if ($.fn.DataTable.isDataTable('#tablaPrestamos')) {
+                    $('#tablaPrestamos').DataTable().destroy();
+                }
+
+
+                Swal.fire({
+                    title: '¡Cobro Registrado!',
+                    html: `
+                    <div class="text-center">
+                        <div class="alert alert-success mb-3">
+                            <i class="fas fa-check-circle fa-2x text-success mb-2"></i><br>
+                            <strong>Pago registrado exitosamente</strong>
+                        </div>
+                        <p><strong>Recibo:</strong> #${datosCobro.idCobro}</p>
+                        <p><strong>Cuota:</strong> #${datosCobro.numeroCuota}</p>
+                        
+                        <!-- MOSTRAR DISTRIBUCIÓN REAL -->
+                        <div class="alert alert-info">
+                            <strong>Distribución Aplicada:</strong><br>
+                            <strong>Total: $${distribucionReal.total.toFixed(2)}</strong>
+                        </div>
+                        
+                        <p><strong>Cliente:</strong> ${datosCobro.cliente.nombre} ${datosCobro.cliente.apellido}</p>
+                        ${estadoPrestamo ?
+                            '<div class="alert alert-success mt-2"><i class="fas fa-trophy me-1"></i>¡Préstamo completamente liquidado!</div>' :
+                            ''}
+                    </div>
+                `,
+                    icon: 'success',
+                    showCancelButton: true,
+                    confirmButtonText: '<i class="fas fa-receipt me-1"></i>Generar Recibo PDF',
+                    cancelButtonText: '<i class="fas fa-check me-1"></i>Solo Continuar',
+                    confirmButtonColor: '#198754',
+                    cancelButtonColor: '#28a745'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        generarTicketCobroPDF(datosCobro);
+                    }
+                });
+
+                $('#modalCobro').modal('hide');
+                $('#formCobro')[0].reset();
+                nuevaBusqueda();
+                cargarMovimientosDia();
+            } else {
+                Swal.fire('Error', response.message || 'Error al registrar el cobro', 'error');
+            }
+        },
+        error: function (xhr, status, error) {
+            $btnGuardar.prop('disabled', false).html('<i class="fas fa-save me-2"></i>Registrar Cobro');
+            console.error('Error AJAX:', error);
+            Swal.fire('Error', 'Error al conectar con el servidor', 'error');
+        }
+    });
+};
+
+
 
 function generarTicketDesembolsoPDF(solicitudData, clienteData, gestorData) {
     const fecha = new Date();
@@ -819,6 +1263,7 @@ function generarTicketDesembolsoPDF(solicitudData, clienteData, gestorData) {
     mostrarOpcionesPDF(docDefinition, 'COMPROBANTE DE DESEMBOLSO', `Desembolso_${solicitudData.id}_${Date.now()}`);
 }
 
+
 function generarTicketCobroPDF(datosCobro) {
     const fecha = new Date();
     const fechaFormateada = fecha.toLocaleDateString('es-ES');
@@ -853,7 +1298,8 @@ function generarTicketCobroPDF(datosCobro) {
                     body: [
                         [{ text: 'FECHA:', bold: true }, fechaFormateada],
                         [{ text: 'HORA:', bold: true }, horaFormateada],
-                        [{ text: 'RECIBO:', bold: true }, `#${datosCobro.idCobro}`]
+                        [{ text: 'RECIBO:', bold: true }, `#${datosCobro.idCobro}`],
+                        [{ text: 'PRÉSTAMO:', bold: true }, `#${datosCobro.idPrestamo || 'N/A'}`]
                     ]
                 },
                 layout: 'noBorders',
@@ -878,32 +1324,30 @@ function generarTicketCobroPDF(datosCobro) {
                 margin: [0, 0, 0, 10]
             },
             {
-                text: 'DESGLOSE',
+                table: {
+                    widths: ['100%'],
+                    body: [
+                        [{ text: 'MONTO PAGADO', fontSize: 12, bold: true, alignment: 'center', fillColor: '#e8f5e8' }],
+                        [{ text: `$${datosCobro.montoTotal.toFixed(2)}`, fontSize: 16, bold: true, color: '#1976D2', alignment: 'center', fillColor: '#e8f5e8' }]
+                    ]
+                },
+                margin: [0, 0, 0, 15]
+            },
+            {
+                text: 'MÉTODO DE PAGO',
                 fontSize: 9,
                 bold: true,
                 decoration: 'underline',
-                margin: [0, 0, 0, 5]
-            },
-            {
-                table: {
-                    widths: ['60%', '40%'],
-                    body: [
-                        [{ text: 'Capital:', bold: true }, { text: `$${datosCobro.montoCapital.toFixed(2)}`, alignment: 'right', bold: true, color: '#2E7D32' }],
-                        [{ text: 'Interés:', bold: true }, { text: `$${datosCobro.montoInteres.toFixed(2)}`, alignment: 'right', bold: true, color: '#2E7D32' }],
-                        [{ text: 'Mora:', bold: true }, { text: `$${datosCobro.montoMora.toFixed(2)}`, alignment: 'right', bold: true, color: '#2E7D32' }]
-                    ]
-                },
-                layout: 'noBorders',
-                margin: [0, 0, 0, 10]
+                margin: [0, 10, 0, 5]
             },
             {
                 table: {
                     widths: ['100%'],
                     body: [
-                        [{ text: 'TOTAL PAGADO', fontSize: 10, bold: true, alignment: 'center', fillColor: '#e8f5e8' }],
-                        [{ text: `$${datosCobro.montoTotal.toFixed(2)}`, fontSize: 14, bold: true, color: '#1976D2', alignment: 'center', fillColor: '#e8f5e8' }]
+                        [{ text: datosCobro.metodoPago || 'EFECTIVO', fontSize: 10, bold: true, alignment: 'center' }]
                     ]
                 },
+                layout: 'noBorders',
                 margin: [0, 0, 0, 15]
             },
             {
@@ -923,8 +1367,6 @@ function generarTicketCobroPDF(datosCobro) {
                 layout: 'lightHorizontalLines',
                 margin: [0, 0, 0, 15]
             },
-
-            // Monto recibido neto
             {
                 text: 'MONTO NETO RECIBIDO',
                 fontSize: 9,
@@ -937,14 +1379,12 @@ function generarTicketCobroPDF(datosCobro) {
                     widths: ['60%', '40%'],
                     body: [
                         [{ text: 'Total menos descuentos:', bold: true, color: '#1976D2' },
-                            { text: `$_________`, alignment: 'right', bold: true, fontSize: 10, color: '#1976D2' }]
+                        { text: `$_________`, alignment: 'right', bold: true, fontSize: 10, color: '#1976D2' }]
                     ]
                 },
                 layout: 'lightHorizontalLines',
                 margin: [0, 0, 0, 15]
             },
-
-            // Firma de recibido
             {
                 text: 'FIRMA DE RECIBIDO',
                 fontSize: 9,
@@ -975,303 +1415,6 @@ function generarTicketCobroPDF(datosCobro) {
     mostrarOpcionesPDF(docDefinition, 'RECIBO DE PAGO', `Recibo_${datosCobro.idCobro}_${Date.now()}`);
 }
 
-function mostrarOpcionesPDF(docDefinition, titulo, nombreArchivo) {
-    Swal.fire({
-        title: titulo,
-        text: '¿Qué desea hacer con el documento?',
-        icon: 'question',
-        showCancelButton: true,
-        showDenyButton: true,
-        confirmButtonText: '<i class="fas fa-download me-1"></i>Descargar PDF',
-        denyButtonText: '<i class="fas fa-eye me-1"></i>Ver Vista Previa',
-        cancelButtonText: '<i class="fas fa-times me-1"></i>Cerrar',
-        confirmButtonColor: '#198754',
-        denyButtonColor: '#0d6efd',
-        cancelButtonColor: '#6c757d'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            pdfMake.createPdf(docDefinition).download(`${nombreArchivo}.pdf`);
-            showAlert('success', 'PDF descargado exitosamente');
-        } else if (result.isDenied) {
-            pdfMake.createPdf(docDefinition).open();
-        }
-    });
-}
-
-function cargarDashboard() {
-    const fecha = obtenerFechaSalvador();
-
-    $.ajax({
-        url: `/Auxiliares/GetMovimientosDiariosCompleto?fecha=${fecha}`,
-        method: 'GET',
-        success: function (response) {
-            if (response.success && response.resumen) {
-                //console.log(response);
-                //$('#totalEfectivo').text('$' + response.resumen.efectivoDisponible.toFixed(2));
-                $('#ingresosDia').text('$' + response.resumen.ingresosDia.toFixed(2));
-                $('#egresosDia').text('$' + response.resumen.egresosDia.toFixed(2));
-                $('#totalMovimientos').text(response.resumen.totalMovimientos || 0);
-            }
-        },
-        error: function () {
-            console.error('Error al cargar estadísticas del dashboard');
-        }
-    });
-}
-function obtenerDatosUsuarioLogueado() {
-    return {
-        nombre: 'Sistema',
-        apellido: 'Administrativo'
-    };
-}
-
-function verDetalle(idMovimiento) {
-    // Mostrar loading
-    Swal.fire({
-        title: 'Cargando...',
-        text: 'Obteniendo detalles del movimiento',
-        allowOutsideClick: false,
-        showConfirmButton: false,
-        willOpen: () => {
-            Swal.showLoading();
-        }
-    });
-
-    // ✅ Usar tu método existente con el parámetro adicional
-    $.ajax({
-        url: `/Auxiliares/GetMovimientosDetallado?idMovimiento=${idMovimiento}`,
-        method: 'GET',
-        success: function (response) {
-            if (response.success && response.data) {
-                mostrarModalDetalleMovimiento(response.data);
-            } else {
-                Swal.fire({
-                    title: 'Error',
-                    text: response.message || 'No se pudo obtener el detalle del movimiento',
-                    icon: 'error',
-                    confirmButtonColor: '#dc3545'
-                });
-            }
-        },
-        error: function (xhr, status, error) {
-            console.error('Error al obtener detalle:', error);
-            Swal.fire({
-                title: 'Error de Conexión',
-                text: 'No se pudo conectar con el servidor para obtener los detalles',
-                icon: 'error',
-                confirmButtonColor: '#dc3545'
-            });
-        }
-    });
-}
-
-// ✅ FUNCIÓN CORREGIDA para trabajar con datos del servidor
-function mostrarModalDetalleMovimiento(movimiento) {
-    //console.log('Datos recibidos:', movimiento);
-
-    // ✅ Usar datos reales del servidor (no extraer de HTML)
-    const monto = parseFloat(movimiento.monto) || 0;
-    const esIngreso = movimiento.tipo === "INGRESO";
-    const esEgreso = movimiento.tipo === "EGRESO";
-
-    // Determinar clase de badge e ícono
-    const badgeClass = esIngreso ? 'bg-success' : 'bg-danger';
-    const iconClass = esIngreso ? 'fas fa-arrow-down' : 'fas fa-arrow-up';
-
-    // Formatear fecha
-    const fechaFormateada = movimiento.fechaPago ?
-        new Date(movimiento.fechaPago).toLocaleDateString('es-ES') :
-        new Date().toLocaleDateString('es-ES');
-
-    // Crear el contenido del modal con DATOS REALES
-    const modalContent = `
-        <div class="text-start">
-            <!-- Encabezado del movimiento -->
-            <div class="alert alert-info mb-4">
-                <div class="row align-items-center">
-                    <div class="col-2 text-center">
-                        <i class="${iconClass} fa-2x"></i>
-                    </div>
-                    <div class="col-10">
-                        <h5 class="mb-1">
-                            <span class="badge ${badgeClass} fs-6 me-2">${movimiento.tipo}</span>
-                            Movimiento #${movimiento.id}
-                        </h5>
-                        <p class="mb-0 text-muted">
-                            <i class="fas fa-calendar me-1"></i>${fechaFormateada} - 
-                            <i class="fas fa-clock me-1"></i>${movimiento.hora}
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Información principal -->
-            <div class="row mb-4">
-                <div class="col-md-6">
-                    <div class="card border-primary">
-                        <div class="card-header bg-primary text-white">
-                            <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Información General</h6>
-                        </div>
-                        <div class="card-body">
-                            <table class="table table-borderless mb-0">
-                                <tr>
-                                    <td><strong>Concepto:</strong></td>
-                                    <td>${movimiento.concepto || 'No especificado'}</td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Método de Pago:</strong></td>
-                                    <td>${movimiento.tipoPago || 'EFECTIVO'}</td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Usuario Responsable:</strong></td>
-                                    <td>${movimiento.usuario || 'Sistema'}</td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Número de Cuota:</strong></td>
-                                    <td>${movimiento.numeropago && movimiento.numeropago > 0 ? `Cuota #${movimiento.numeropago}` : 'N/A'}</td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Préstamo:</strong></td>
-                                    <td>#${movimiento.idPrestamo || 'N/A'}</td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Estado:</strong></td>
-                                    <td>${movimiento.pagado == 1 ?
-            '<span class="badge bg-success">Procesado</span>' :
-            '<span class="badge bg-warning">Pendiente</span>'}</td>
-                                </tr>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-6">
-                    <div class="card border-success">
-                        <div class="card-header bg-success text-white">
-                            <h6 class="mb-0"><i class="fas fa-dollar-sign me-2"></i>Información Financiera</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="text-center mb-3">
-                                <h3 class="text-success mb-0">$${monto.toFixed(2)}</h3>
-                                <small class="text-muted">Monto Total</small>
-                            </div>
-                            
-                            <!-- ✅ DESGLOSE REAL CON DATOS DEL SERVIDOR -->
-                            ${(movimiento.capital || movimiento.interes || movimiento.mora) ? `
-                                <hr>
-                                <h6 class="mb-2">Desglose Financiero:</h6>
-                                <table class="table table-sm">
-                                    ${movimiento.capital && movimiento.capital > 0 ? `
-                                        <tr>
-                                            <td><i class="fas fa-university me-1"></i>Capital:</td>
-                                            <td class="text-end fw-bold text-primary">$${parseFloat(movimiento.capital).toFixed(2)}</td>
-                                        </tr>
-                                    ` : ''}
-                                    ${movimiento.interes && movimiento.interes > 0 ? `
-                                        <tr>
-                                            <td><i class="fas fa-percentage me-1"></i>Interés:</td>
-                                            <td class="text-end fw-bold text-info">$${parseFloat(movimiento.interes).toFixed(2)}</td>
-                                        </tr>
-                                    ` : ''}
-                                    ${movimiento.mora && movimiento.mora > 0 ? `
-                                        <tr>
-                                            <td><i class="fas fa-exclamation-triangle me-1"></i>Mora:</td>
-                                            <td class="text-end fw-bold text-warning">$${parseFloat(movimiento.mora).toFixed(2)}</td>
-                                        </tr>
-                                    ` : ''}
-                                    ${movimiento.morahist && movimiento.morahist > 0 ? `
-                                        <tr>
-                                            <td><i class="fas fa-history me-1"></i>Mora Histórica:</td>
-                                            <td class="text-end fw-bold text-secondary">$${parseFloat(movimiento.morahist).toFixed(2)}</td>
-                                        </tr>
-                                    ` : ''}
-                                </table>
-                            ` : `
-                                <div class="alert alert-light text-center">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    <small>Movimiento sin desglose detallado</small>
-                                </div>
-                            `}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Información del cliente -->
-            <div class="card border-info mb-4">
-                <div class="card-header bg-info text-white">
-                    <h6 class="mb-0"><i class="fas fa-user me-2"></i>Información del Cliente</h6>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <p class="mb-1"><strong><i class="fas fa-user me-1"></i>Nombre:</strong> ${movimiento.cliente || 'No especificado'}</p>
-                            ${movimiento.duiCliente ? `<p class="mb-1"><strong><i class="fas fa-id-card me-1"></i>DUI:</strong> ${movimiento.duiCliente}</p>` : ''}
-                            ${movimiento.telefonoCliente ? `<p class="mb-0"><strong><i class="fas fa-phone me-1"></i>Teléfono:</strong> ${movimiento.telefonoCliente}</p>` : ''}
-                        </div>
-                        <div class="col-md-6">
-                            ${movimiento.montoPrestamo ? `<p class="mb-1"><strong><i class="fas fa-money-bill me-1"></i>Monto Préstamo:</strong> $${parseFloat(movimiento.montoPrestamo).toFixed(2)}</p>` : ''}
-                            ${movimiento.tipoPrestamo ? `<p class="mb-1"><strong><i class="fas fa-calendar me-1"></i>Tipo:</strong> ${movimiento.tipoPrestamo}</p>` : ''}
-                            ${movimiento.estadoPrestamo ? `<p class="mb-0"><strong><i class="fas fa-flag me-1"></i>Estado:</strong> 
-                                <span class="badge ${movimiento.estadoPrestamo === 'A' ? 'bg-success' :
-                movimiento.estadoPrestamo === 'C' ? 'bg-primary' : 'bg-secondary'}">
-                                    ${movimiento.estadoPrestamo === 'A' ? 'Activo' :
-                movimiento.estadoPrestamo === 'C' ? 'Cancelado' : 'Otro'}
-                                </span></p>` : ''}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Observaciones automáticas -->
-            <div class="card border-warning">
-                <div class="card-header bg-warning">
-                    <h6 class="mb-0"><i class="fas fa-comment me-2"></i>Observaciones del Sistema</h6>
-                </div>
-                <div class="card-body">
-                    <ul class="list-unstyled mb-0">
-                        ${movimiento.pagado == 1 ?
-            '<li><i class="fas fa-check-circle text-success me-2"></i>Transacción procesada exitosamente</li>' :
-            '<li><i class="fas fa-clock text-warning me-2"></i>Transacción pendiente de procesamiento</li>'}
-                        
-                        ${movimiento.tipo === "EGRESO" ?
-            '<li><i class="fas fa-money-bill-wave text-primary me-2"></i>Dinero entregado al cliente (desembolso)</li>' :
-            '<li><i class="fas fa-hand-holding-usd text-success me-2"></i>Dinero recibido del cliente (pago)</li>'}
-                        
-                        ${movimiento.mora && movimiento.mora > 0 ?
-            `<li><i class="fas fa-exclamation-triangle text-warning me-2"></i>Incluye recargo por mora: $${parseFloat(movimiento.mora).toFixed(2)}</li>` : ''}
-                        
-                        ${movimiento.estadoPrestamo === 'C' ?
-            '<li><i class="fas fa-trophy text-success me-2"></i>¡Este movimiento completó la liquidación del préstamo!</li>' : ''}
-                    </ul>
-                </div>
-            </div>
-        </div>
-    `;
-
-    // Mostrar el modal
-    Swal.fire({
-        title: `<i class="${iconClass} me-2"></i>Detalle Completo del Movimiento`,
-        html: modalContent,
-        width: '900px',
-        showCancelButton: true,
-        showConfirmButton: true,
-        confirmButtonText: '<i class="fas fa-receipt me-1"></i>Generar Comprobante',
-        cancelButtonText: '<i class="fas fa-times me-1"></i>Cerrar',
-        confirmButtonColor: '#198754',
-        cancelButtonColor: '#6c757d',
-        customClass: {
-            container: 'swal-wide'
-        }
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // Generar comprobante con datos completos
-            generarComprobanteCompleto(movimiento);
-        }
-    });
-}
-
-// ✅ FUNCIÓN MEJORADA para generar comprobante con datos completos
 function generarComprobanteCompleto(movimiento) {
     const fecha = movimiento.fechaPago ? new Date(movimiento.fechaPago) : new Date();
     const fechaFormateada = fecha.toLocaleDateString('es-ES');
@@ -1289,7 +1432,7 @@ function generarComprobanteCompleto(movimiento) {
                 margin: [0, 0, 0, 5]
             },
             {
-                text: 'COMPROBANTE DETALLADO DE MOVIMIENTO',
+                text: 'COMPROBANTE DE MOVIMIENTO',
                 fontSize: 10,
                 bold: true,
                 alignment: 'center',
@@ -1315,8 +1458,6 @@ function generarComprobanteCompleto(movimiento) {
                 layout: 'noBorders',
                 margin: [0, 0, 0, 10]
             },
-
-            // Cliente
             {
                 text: 'CLIENTE',
                 fontSize: 9,
@@ -1336,30 +1477,16 @@ function generarComprobanteCompleto(movimiento) {
                 layout: 'noBorders',
                 margin: [0, 0, 0, 10]
             },
-
-            // Desglose financiero
-            {
-                text: 'DETALLE FINANCIERO',
-                fontSize: 9,
-                bold: true,
-                decoration: 'underline',
-                margin: [0, 5, 0, 5]
-            },
             {
                 table: {
-                    widths: ['60%', '40%'],
+                    widths: ['100%'],
                     body: [
-                        ...(movimiento.capital && movimiento.capital > 0 ? [[{ text: 'Capital:', bold: true }, { text: `$${parseFloat(movimiento.capital).toFixed(2)}`, alignment: 'right' }]] : []),
-                        ...(movimiento.interes && movimiento.interes > 0 ? [[{ text: 'Interés:', bold: true }, { text: `$${parseFloat(movimiento.interes).toFixed(2)}`, alignment: 'right' }]] : []),
-                        ...(movimiento.mora && movimiento.mora > 0 ? [[{ text: 'Mora:', bold: true }, { text: `$${parseFloat(movimiento.mora).toFixed(2)}`, alignment: 'right', color: '#d32f2f' }]] : []),
-                        [{ text: 'TOTAL:', bold: true, fontSize: 10 }, { text: `$${parseFloat(movimiento.monto).toFixed(2)}`, alignment: 'right', bold: true, fontSize: 10, color: '#1976D2' }]
+                        [{ text: 'MONTO TOTAL', fontSize: 12, bold: true, alignment: 'center', fillColor: '#e8f5e8' }],
+                        [{ text: `$${parseFloat(movimiento.monto).toFixed(2)}`, fontSize: 16, bold: true, color: '#1976D2', alignment: 'center', fillColor: '#e8f5e8' }]
                     ]
                 },
-                layout: 'lightHorizontalLines',
                 margin: [0, 0, 0, 15]
             },
-
-            // Información del préstamo
             ...(movimiento.idPrestamo ? [
                 {
                     table: {
@@ -1389,8 +1516,6 @@ function generarComprobanteCompleto(movimiento) {
                 layout: 'lightHorizontalLines',
                 margin: [0, 0, 0, 15]
             },
-
-            // Monto recibido neto
             {
                 text: 'MONTO NETO RECIBIDO',
                 fontSize: 9,
@@ -1403,14 +1528,12 @@ function generarComprobanteCompleto(movimiento) {
                     widths: ['60%', '40%'],
                     body: [
                         [{ text: 'Total menos descuentos:', bold: true, color: '#1976D2' },
-                         { text: `$_________`, alignment: 'right', bold: true, fontSize: 10, color: '#1976D2' }]
+                        { text: `$_________`, alignment: 'right', bold: true, fontSize: 10, color: '#1976D2' }]
                     ]
                 },
                 layout: 'lightHorizontalLines',
                 margin: [0, 0, 0, 15]
             },
-
-            // Firma de recibido
             {
                 text: 'FIRMA DE RECIBIDO',
                 fontSize: 9,
@@ -1429,7 +1552,7 @@ function generarComprobanteCompleto(movimiento) {
                 margin: [0, 0, 0, 15]
             },
             {
-                text: 'CREDI-EXPRESS DE EL SALVADOR\nComprobante oficial detallado',
+                text: 'CREDI-EXPRESS DE EL SALVADOR\nComprobante oficial',
                 alignment: 'center',
                 fontSize: 7,
                 italics: true,
@@ -1438,208 +1561,5 @@ function generarComprobanteCompleto(movimiento) {
         ]
     };
 
-    // Mostrar opciones para el PDF
-    mostrarOpcionesPDF(docDefinition, 'COMPROBANTE DETALLADO', `MovimientoDetallado_${movimiento.id}_${Date.now()}`);
-}
-
-// NUEVA FUNCIÓN para obtener préstamos con calendario
-function buscarPrestamosActivos(idCliente) {
-    $.ajax({
-        url: `/Auxiliares/buscarPrestamosActivos?idCliente=${idCliente}`,
-        method: 'GET',
-        success: function (data) {
-            if (data && data.success && Array.isArray(data.data)) {
-                if (data.data.length === 0) {
-                    mostrarError("No se encontraron préstamos activos para este cliente");
-                    return;
-                }
-                mostrasListaPrestamos(data.data);
-                hideLoadingSpinner();
-            } else {
-                hideLoadingSpinner();
-                mostrarError("No se encontraron préstamos activos para este cliente");
-
-            }
-        },
-        error: function (xhr, status, error) {
-            hideLoadingSpinner();
-            console.error('Error al buscar préstamos:', error);
-            mostrarError('Error al buscar los préstamos. Intente nuevamente.');
-        }
-    });
-}
-
-// NUEVA FUNCIÓN para mostrar préstamos con información del calendario
-function mostrasListaPrestamos(prestamos) {
-    const contenedor = $('#listaPrestamos');
-    contenedor.empty();
-    $('#cantidadPrestamos').text(prestamos.length);
-
-    prestamos.forEach(function (prestamo, index) {
-        const estadoMora = prestamo.cuotasVencidas > 0
-            ? `<span class="badge bg-danger">Mora: ${prestamo.cuotasVencidas} cuotas</span>`
-            : `<span class="badge bg-success">Al día</span>`;
-
-        const cardPrestamo = `
-            <div class="card mb-2 prestamo-card" data-prestamo='${JSON.stringify(prestamo)}' 
-                 onclick="seleccionarPrestamoConCalendario(${index})" style="cursor: pointer;">
-                <div class="card-body p-3">
-                    <div class="row align-items-center">
-                        <div class="col-lg-2 col-6">
-                            <strong class="text-primary">Préstamo #${prestamo.id}</strong>
-                            <br><small class="text-muted">${prestamo.tipoPrestamo}</small>
-                        </div>
-                        <div class="col-lg-2 col-6">
-                            <small class="text-muted">Monto Original</small><br>
-                            <strong>$${prestamo.monto.toFixed(2)}</strong>
-                        </div>
-                        <div class="col-lg-2 col-6">
-                            <small class="text-muted">Cuota</small><br>
-                            <strong class="text-success">$${prestamo.cuotas.toFixed(2)}</strong>
-                        </div>
-                        <div class="col-lg-2 col-6">
-                            <small class="text-muted">Abonos</small><br>
-                            <strong>${prestamo.cuotasPagadas}</strong>
-                        </div>
-                        <div class="col-lg-2 col-6">
-                            <small class="text-muted">Saldo</small><br>
-                            <strong class="text-warning">$${prestamo.saldoPendiente.toFixed(2)}</strong>
-                        </div>
-                        <div class="col-lg-2 col-6">
-                            ${estadoMora}
-                            <br><small class="text-info">Próxima: #${prestamo.proximaCuota}</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        contenedor.append(cardPrestamo);
-    });
-}
-
-// NUEVA FUNCIÓN para seleccionar préstamo y cargar cronograma real
-function seleccionarPrestamoConCalendario(index) {
-    const prestamos = JSON.parse($('#listaPrestamos').find('.prestamo-card').eq(index).attr('data-prestamo'));
-
-    $('#prestamoIdSeleccionado').text(prestamos.id);
-    $('#prestamoCuotaMensual').text('$' + prestamos.cuotas.toFixed(2));
-    $('#prestamoProximaCuota').text(prestamos.proximaCuota || 'Sin cuotas pendientes');  
-    $('#prestamoSeleccionadoId').val(prestamos.id);
-    $('#prestamoFechaVencimiento').val(prestamos.proximaFecha);
-
-    // Mostrar formulario y cronograma
-    $('#seccionFormularioCobro').show();
-    $('#seccionCronograma').show();
-    $('#btnGuardarCobro').show();
-
-    // Cargar cronograma real
-    mostrarPagosReal(prestamos.id);
-
-    // Resaltar préstamo seleccionado
-    $('.prestamo-card').removeClass('border-success bg-light');
-    $('.prestamo-card').eq(index).addClass('border-success bg-light');
-}
-
-// NUEVA FUNCIÓN para cargar cronograma desde la base de datos
-function mostrarPagosReal(idPrestamo) {
-    $.ajax({
-        url: `/Auxiliares/GetCronogramaPagosReal?idPrestamo=${idPrestamo}`,
-        method: 'GET',
-        success: function (response) {
-            if (response.success && response.cronograma) {
-                mostrarCronogramaReal(response.cronograma, idPrestamo);
-            } else {
-                $('#tablaCronograma').html('<tr><td colspan="6" class="text-center text-muted">No se pudo cargar el cronograma</td></tr>');
-            }
-        },
-        error: function () {
-            $('#tablaCronograma').html('<tr><td colspan="6" class="text-center text-danger">Error al cargar cronograma</td></tr>');
-        }
-    });
-}
-
-// NUEVA FUNCIÓN para mostrar cronograma con selección de cuotas
-function mostrarCronogramaReal(cronograma, idPrestamo) {
-    const tbody = $('#tablaCronograma');
-    tbody.empty();
-
-    console.log(cronograma);
-
-    cronograma.forEach(function (cuota) {
-        let claseRow = '';
-
-        const fila = `
-            <tr class="${claseRow}">
-                <td><strong>#${cuota.numeroCuota}</strong></td>
-                <td>${cuota.fechaProgramada}</td>
-                <td>$${parseFloat(cuota.montoCuota).toFixed(2)}</td>
-                <td>$${parseFloat(cuota.montoPagado).toFixed(2)}</td>
-                <td>${cuota.fechaRealPago || '-'}</td>
-            </tr>
-        `;
-        tbody.append(fila);
-        $('#registroCobro').show();
-    });
-
-    $.ajax({
-        url: `/Auxiliares/GetPagoARealizar?idPrestamo=${idPrestamo}`,
-        method: 'GET',
-        success: function (response) {
-            datos = {};
-
-            if (response.success) {
-                datos = response.data;
-                $('#numeroCuota').val(datos.abonos);
-                $('#conceptoCobro').val('CUOTA_COMPLETA');
-
-                $('#montoCapital').val(datos.capitalPagar.toFixed(2));
-                $('#montoInteres').val(datos.interesPagar.toFixed(2));
-                $('#montoMora').val(0.00);
-                $('#montoDomicilio').val(datos.domiclioPagar.toFixed(2));
-
-                ajustarCamposCobro();
-            }
-        },
-        error: function () {
-            
-        }
-    });
-}
-
-function ajustarCamposCobro() {
-
-    console.log(datos);
-
-    const concepto = $('#conceptoCobro').val();
-    // Resetear campos
-    //$('#montoCapital, #montoInteres, #montoMora').val('').prop('disabled', false);
-    // Configurar campos según el concepto
-    switch (concepto) {
-        case 'CUOTA_COMPLETA':
-            $('#montoInteres').val(datos.interesPagar.toFixed(2) || '0.00');
-            $('#montoMora').val(0.00);
-            $('#montoCapital').val(datos.capitalPagar.toFixed(2) || '0.00');
-            $('#montoDomicilio').val(datos.domiclioPagar.toFixed(2) || '0.00');
-            $('#montoInteres, #montoMora, #montoCapital, #montoDomicilio').prop('disabled', true);
-            break;
-        case 'ABONO_PARCIAL':
-            // Solo capital habilitado
-            $('#montoInteres, #montoMora').val('0.00').prop('disabled', true);
-            $('#montoInteres').val(datos.interesPagar.toFixed(2) || '0.00');
-            $('#montoDomicilio').val(datos.domiclioPagar.toFixed(2) || '0.00');
-            $('#montoMora, #montoCapital').prop('disabled', false);
-            break;
-    }
-
-    calcularTotal();
-}
-
-function calcularTotal() {
-    const capital = parseFloat($('#montoCapital').val()) || 0;
-    const interes = parseFloat($('#montoInteres').val()) || 0;
-    const mora = parseFloat($('#montoMora').val()) || 0;
-    const domicilio = parseFloat($('#montoDomicilio').val()) || 0;
-
-    const total = capital + interes + mora + domicilio;
-    $('#montoTotal').val(total.toFixed(2));
+    mostrarOpcionesPDF(docDefinition, 'COMPROBANTE', `Movimiento_${movimiento.id}_${Date.now()}`);
 }
