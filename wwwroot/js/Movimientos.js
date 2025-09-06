@@ -1563,3 +1563,4 @@ function generarComprobanteCompleto(movimiento) {
 
     mostrarOpcionesPDF(docDefinition, 'COMPROBANTE', `Movimiento_${movimiento.id}_${Date.now()}`);
 }
+

@@ -319,23 +319,56 @@ function calcularValoresEdicion() {
                 break;
 
             case 'SEMANAL':
-                // Interés mensual equivalente a 4 semanas
-                baseInteres = (tasaInteresMensual / 100) / 4;
-                interesxTiempo = baseInteres * cuotas;
-                // Domicilio mensual equivalente a 4 semanas
-                baseDomicilio = (tasaDomicilio / 100) / 4;
-                domicilioxTiempo = baseDomicilio * cuotas;
-                factor = 1;
+                if (cuotas > 4) {
+                    // Más de 4 semanas = calcular por meses completos
+                    let meses = cuotas / 4; // calcular meses completos (4 semanas = 1 mes)
+                    // Interés aplicado tasa semanal
+                    baseInteres = (tasaInteresMensual / 100) / cuotas;
+                    interesxTiempo = baseInteres * cuotas;
+                    interesxTiempo = interesxTiempo * meses;
+                    // Domicilio aplicado tasa semanal
+                    baseDomicilio = (tasaDomicilio / 100) / cuotas;
+                    domicilioxTiempo = baseDomicilio * cuotas;
+
+                    domicilioxTiempo = domicilioxTiempo * meses;
+                    factor = meses;
+                }
+                else {
+                    // Interés mensual equivalente a 4 semanas
+                    baseInteres = (tasaInteresMensual / 100) / 4;
+                    interesxTiempo = baseInteres * cuotas;
+                    // Domicilio mensual equivalente a 4 semanas
+                    baseDomicilio = (tasaDomicilio / 100) / 4;
+                    domicilioxTiempo = baseDomicilio * cuotas;
+                    factor = 1;
+                }
+
                 break;
 
             case 'QUINCENAL':
-                // Interés mensual equivalente a 2 semanas
-                baseInteres = (tasaInteresMensual / 100) / 2;
-                interesxTiempo = baseInteres * cuotas;
-                // Domicilio mensual equivalente a 2 semanas
-                baseDomicilio = (tasaDomicilio / 100) / 2;
-                domicilioxTiempo = baseDomicilio * cuotas;
-                factor = 1;
+                if (cuotas > 2) {
+                    // Más de 5 quincenas = calcular por meses completos
+                    let meses = cuotas / 2; // calcular meses completos (2 quincenas = 1 mes)
+                    // Interés aplicado tasa quincenal
+                    baseInteres = (tasaInteresMensual / 100) / cuotas;
+                    interesxTiempo = baseInteres * cuotas;
+                    interesxTiempo = interesxTiempo * meses;
+                    // Domicilio aplicado tasa quincenal
+                    baseDomicilio = (tasaDomicilio / 100) / cuotas;
+                    domicilioxTiempo = baseDomicilio * cuotas;
+                    domicilioxTiempo = domicilioxTiempo * meses;
+                    factor = meses;
+                }
+                else {
+                    // Interés mensual equivalente a 2 semanas
+                    baseInteres = (tasaInteresMensual / 100) / 2;
+                    interesxTiempo = baseInteres * cuotas;
+                    // Domicilio mensual equivalente a 2 semanas
+                    baseDomicilio = (tasaDomicilio / 100) / 2;
+                    domicilioxTiempo = baseDomicilio * cuotas;
+                    factor = 1;
+                }
+
                 break;
 
             case 'MENSUAL':
